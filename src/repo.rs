@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+use crate::config::Config;
 use crate::error::{RcliError, Result};
 
 pub struct Repository {
@@ -62,7 +63,8 @@ impl Repository {
     }
 
     pub fn experiments_dir(&self) -> PathBuf {
-        self.root.join("experiments")
+        let config = Config::load(&self.config_path()).unwrap_or_default();
+        self.root.join(&config.experiments_dir)
     }
 
     pub fn exp_dir(&self, exp_id: &str) -> PathBuf {

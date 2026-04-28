@@ -73,7 +73,8 @@ pub fn new(
         "id": &exp_id,
         "short_id": short_id_str,
         "status": "created",
-        "created_at": created_at,
+        "created_at": &created_at,
+        "updated_at": &created_at,
         "commit_hash": commit_hash,
         "data_used": if manual { serde_json::Value::Null } else { serde_json::Value::String(data_name.clone()) },
         "command": command,
@@ -146,10 +147,6 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     fs::create_dir_all(&log_dir)?;
     let log_path = log_dir.join("run.log");
 
-    let started_at = chrono::Local::now().to_rfc3339();
-    db.update_experiment_status(exp_id, "running", Some(&started_at), None, None)?;
-    update_exp_json_status(repo, exp_id, "running", Some(&started_at), None, None)?;
-
     use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -165,6 +162,10 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     let child_id = child.id() as i32;
     let pid_path = repo.exp_dir(exp_id).join("pid");
     fs::write(&pid_path, child_id.to_string())?;
+
+    let started_at = chrono::Local::now().to_rfc3339();
+    db.update_experiment_status(exp_id, "running", Some(&started_at), None, None)?;
+    update_exp_json_status(repo, exp_id, "running", Some(&started_at), None, None)?;
 
     let interrupted = Arc::new(AtomicBool::new(false));
     let interrupted_ctrlc = interrupted.clone();
@@ -418,6 +419,8 @@ pub fn param(repo: &Repository, exp_id: &str, json_params: &str) -> Result<()> {
         let mut json: serde_json::Value = serde_json::from_str(&content)?;
         if let Some(obj) = json.as_object_mut() {
             obj.insert("params".to_string(), serde_json::Value::Object(merged));
+            let now = chrono::Local::now().to_rfc3339();
+            obj.insert("updated_at".to_string(), serde_json::Value::String(now));
         }
         fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
     }
@@ -453,6 +456,19 @@ pub fn finish(repo: &Repository, exp_id: &str, status: &str, message: Option<&st
 
     if let Some(msg) = message {
         db.append_experiment_note(exp_id, msg)?;
+
+        // Sync note to JSON
+        let json_path = repo.exp_json_path(exp_id);
+        if json_path.exists() {
+            let content = fs::read_to_string(&json_path)?;
+            let mut json: serde_json::Value = serde_json::from_str(&content)?;
+            if let Some(obj) = json.as_object_mut() {
+                let existing = obj.get("notes").and_then(|v| v.as_str()).unwrap_or("");
+                let new_note = format!("{}\n finish message: {}", existing, msg);
+                obj.insert("notes".to_string(), serde_json::Value::String(new_note));
+            }
+            fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+        }
     }
 
     Ok(())
@@ -474,8 +490,11 @@ fn update_exp_json_status(
     let content = fs::read_to_string(&json_path)?;
     let mut json: serde_json::Value = serde_json::from_str(&content)?;
 
+    let now = chrono::Local::now().to_rfc3339();
+
     if let Some(obj) = json.as_object_mut() {
         obj.insert("status".to_string(), serde_json::Value::String(status.to_string()));
+        obj.insert("updated_at".to_string(), serde_json::Value::String(now));
         if let Some(sa) = started_at {
             obj.insert("started_at".to_string(), serde_json::Value::String(sa.to_string()));
         }
@@ -573,6 +592,46 @@ mod tests {
         let exp = db.get_experiment(&exp_id).unwrap().unwrap();
         assert_eq!(exp.status, "created");
         assert_eq!(exp.command, "echo hello");
+    }
+
+    #[test]
+    fn test_new_uses_custom_experiments_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let _ = git2::Repository::init(&root);
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("exps")).unwrap();
+
+        let mut config = crate::config::Config::default();
+        config.experiments_dir = "exps".to_string();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        fs::write(root.join(".gitignore"), ".research/*.db*\n").unwrap();
+        let git_repo = git2::Repository::open(&root).unwrap();
+        let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
+        let mut index = git_repo.index().unwrap();
+        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = git_repo.find_tree(tree_id).unwrap();
+        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
+
+        let repo = Repository { root: root.to_path_buf() };
+
+        let (exp_id, _exp_dir) = new(
+            &repo, None, Some("echo hello".to_string()), true,
+            None, None, None, None, None,
+        ).unwrap();
+
+        // Experiment should be created under exps/ not experiments/
+        assert!(root.join("exps").join(&exp_id).exists());
+        assert!(!root.join("experiments").join(&exp_id).exists());
+        assert!(repo.exp_json_path(&exp_id).exists());
     }
 
     #[test]

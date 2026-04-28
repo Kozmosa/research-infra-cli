@@ -81,10 +81,14 @@ pub fn status(repo: &Repository) -> Result<SyncStatus> {
             if json_exp == db_json {
                 in_sync.push(exp_summary.id.clone());
             } else {
-                let db_time = exp.created_at.as_str();
-                let json_time = json_exp.get("created_at")
+                let db_time = exp.updated_at.as_str();
+                let json_time = json_exp.get("updated_at")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                    .unwrap_or(
+                        json_exp.get("created_at")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                    );
 
                 if db_time > json_time {
                     need_export.push(exp_summary.id.clone());
@@ -186,10 +190,14 @@ fn sync_auto(repo: &Repository) -> Result<()> {
                 continue;
             }
 
-            let db_time = exp.created_at.as_str();
-            let json_time = json_exp.get("created_at")
+            let db_time = exp.updated_at.as_str();
+            let json_time = json_exp.get("updated_at")
                 .and_then(|v| v.as_str())
-                .unwrap_or("");
+                .unwrap_or(
+                    json_exp.get("created_at")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                );
 
             if db_time > json_time {
                 fs::write(&json_path, serde_json::to_string_pretty(&db_json)?)?;
@@ -220,6 +228,7 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
     let short_id = json.get("short_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("created").to_string();
     let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or(&created_at).to_string();
     let commit_hash = json.get("commit_hash").and_then(|v| v.as_str());
     let data_used = json.get("data_used").and_then(|v| v.as_str());
     let command = json.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -227,9 +236,13 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
     let notes = json.get("notes").and_then(|v| v.as_str());
     let env = json.get("env").and_then(|v| v.as_str());
 
+    let started_at = json.get("started_at").and_then(|v| v.as_str());
+    let finished_at = json.get("finished_at").and_then(|v| v.as_str());
+    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).map(|v| v as i32);
+
     if db.get_experiment(&id)?.is_some() {
         db.upsert_experiment(
-            &id, &short_id, &status, &created_at,
+            &id, &short_id, &status, &created_at, &updated_at,
             commit_hash, data_used, &command,
             params.as_deref(), notes, env,
         )?;
@@ -238,6 +251,11 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
             &id, &short_id, &status, &created_at, commit_hash, data_used, &command,
             params.as_deref(), notes, env,
         )?;
+    }
+
+    // Restore lifecycle fields that insert/upsert don't handle
+    if started_at.is_some() || finished_at.is_some() || exit_code.is_some() {
+        db.update_experiment_status(&id, &status, started_at, finished_at, exit_code)?;
     }
 
     Ok(())
@@ -368,6 +386,38 @@ mod tests {
         let result = sync_auto(&repo);
         assert!(matches!(result, Err(RcliError::SyncConflict(_))));
     }
+
+    #[test]
+    fn test_sync_roundtrip_preserves_params_as_object() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-006", "006", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py",
+            Some(r#"{"lr":0.01,"epochs":10}"#),
+            None, None,
+        ).unwrap();
+
+        // Export to JSON
+        sync_export(&repo).unwrap();
+
+        // Verify params is a JSON object, not a string
+        let json_path = repo.exp_json_path("exp-006");
+        let content = fs::read_to_string(&json_path).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let params = json.get("params").unwrap();
+        assert!(params.is_object(), "params should be exported as JSON object, not string");
+        assert_eq!(params.get("lr").unwrap().as_f64().unwrap(), 0.01);
+        assert_eq!(params.get("epochs").unwrap().as_i64().unwrap(), 10);
+
+        // Import back and verify round-trip
+        let db2 = Database::open(&repo.db_path()).unwrap();
+        db2.init_schema().unwrap();
+        sync_import(&repo).unwrap();
+        let exp = db2.get_experiment("exp-006").unwrap().unwrap();
+        assert_eq!(exp.params, Some(r#"{"epochs":10,"lr":0.01}"#.to_string()));
+    }
 }
 
 pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {
@@ -376,6 +426,7 @@ pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Val
     map.insert("short_id".to_string(), serde_json::Value::String(exp.short_id.clone()));
     map.insert("status".to_string(), serde_json::Value::String(exp.status.clone()));
     map.insert("created_at".to_string(), serde_json::Value::String(exp.created_at.clone()));
+    map.insert("updated_at".to_string(), serde_json::Value::String(exp.updated_at.clone()));
     if let Some(ref sa) = exp.started_at {
         map.insert("started_at".to_string(), serde_json::Value::String(sa.clone()));
     }
@@ -390,7 +441,8 @@ pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Val
     }
     map.insert("command".to_string(), serde_json::Value::String(exp.command.clone()));
     if let Some(ref p) = exp.params {
-        map.insert("params".to_string(), serde_json::json!(p));
+        let parsed: serde_json::Value = serde_json::from_str(p).unwrap_or(serde_json::Value::String(p.clone()));
+        map.insert("params".to_string(), parsed);
     }
     if let Some(ref n) = exp.notes {
         map.insert("notes".to_string(), serde_json::Value::String(n.clone()));

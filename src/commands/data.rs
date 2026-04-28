@@ -31,8 +31,12 @@ pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>,
 
     let registered_at = chrono::Utc::now().to_rfc3339();
 
-    let db = Database::open(&repo.db_path())?;
-    db.insert_dataset(name, &relative_path, Some(&checksum), desc.as_deref(), &registered_at)?;
+    let index_path = repo.data_index_path();
+    let mut datasets = load_data_index(&index_path)?;
+
+    if datasets.iter().any(|d| d.name == name) {
+        return Err(RcliError::DataAlreadyExists(name.to_string()));
+    }
 
     let dataset = crate::db::Dataset {
         name: name.to_string(),
@@ -41,16 +45,12 @@ pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>,
         description: desc,
         registered_at,
     };
-
-    let index_path = repo.data_index_path();
-    let mut datasets = load_data_index(&index_path)?;
-
-    if datasets.iter().any(|d| d.name == name) {
-        return Err(RcliError::DataAlreadyExists(name.to_string()));
-    }
-    datasets.push(dataset);
+    datasets.push(dataset.clone());
 
     save_data_index(&index_path, &datasets)?;
+
+    let db = Database::open(&repo.db_path())?;
+    db.insert_dataset(name, &dataset.path, dataset.checksum.as_deref(), dataset.description.as_deref(), &dataset.registered_at)?;
 
     Ok(())
 }
@@ -203,6 +203,25 @@ mod tests {
         let datasets = list(&repo).unwrap();
         assert_eq!(datasets.len(), 1);
         assert_eq!(datasets[0].description, None);
+    }
+
+    #[test]
+    fn test_register_duplicate_does_not_modify_sqlite() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+
+        register(&repo, "data/raw", "test-data", Some("original".to_string()), None
+        ).unwrap();
+
+        let result = register(&repo, "data/raw", "test-data", Some("new desc".to_string()), None
+        );
+        assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
+
+        // Verify SQLite cache matches YAML source (not the failed attempt)
+        let db = Database::open(&repo.db_path()).unwrap();
+        let ds = db.get_dataset("test-data").unwrap().unwrap();
+        assert_eq!(ds.description, Some("original".to_string()));
     }
 
     #[test]

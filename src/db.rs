@@ -97,7 +97,7 @@ impl Database {
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?4)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             [
                 id, short_id, status, created_at,
                 commit_hash.unwrap_or(""),
@@ -106,6 +106,7 @@ impl Database {
                 params.unwrap_or(""),
                 notes.unwrap_or(""),
                 env.unwrap_or(""),
+                created_at,
             ],
         )?;
         Ok(())
@@ -113,7 +114,7 @@ impl Database {
 
     pub fn get_experiment(&self, exp_id: &str) -> Result<Option<Experiment>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, short_id, status, created_at, started_at, finished_at, commit_hash, data_used, command, params, notes, env, exit_code
+            "SELECT id, short_id, status, created_at, started_at, finished_at, commit_hash, data_used, command, params, notes, env, exit_code, updated_at
              FROM experiments WHERE id = ?1"
         )?;
         let mut rows = stmt.query([exp_id])?;
@@ -132,6 +133,7 @@ impl Database {
                 notes: row.get(10)?,
                 env: row.get(11)?,
                 exit_code: row.get(12)?,
+                updated_at: row.get(13)?,
             }))
         } else {
             Ok(None)
@@ -240,6 +242,7 @@ impl Database {
         short_id: &str,
         status: &str,
         created_at: &str,
+        updated_at: &str,
         commit_hash: Option<&str>,
         data_used: Option<&str>,
         command: &str,
@@ -249,7 +252,7 @@ impl Database {
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?4)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 commit_hash = excluded.commit_hash,
@@ -267,6 +270,7 @@ impl Database {
                 params.unwrap_or(""),
                 notes.unwrap_or(""),
                 env.unwrap_or(""),
+                updated_at,
             ],
         )?;
         Ok(())
@@ -380,6 +384,7 @@ pub struct Experiment {
     pub notes: Option<String>,
     pub env: Option<String>,
     pub exit_code: Option<i32>,
+    pub updated_at: String,
 }
 
 #[derive(Debug, serde::Serialize)]

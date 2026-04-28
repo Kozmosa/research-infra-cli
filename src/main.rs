@@ -86,7 +86,9 @@ fn handle_env(cmd: &EnvCommands, repo_override: Option<&str>, json_mode: bool) -
         }
         EnvCommands::Check { strict } => {
             env::check(&repo, *strict)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"status": "ok"}));
+            } else {
                 println!("工作区检查通过");
             }
             Ok(())
@@ -99,7 +101,9 @@ fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool)
     match cmd {
         DataCommands::Register { path, name, desc, checksum } => {
             data::register(&repo, path, name, desc.clone(), checksum.clone())?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"name": name, "status": "registered"}));
+            } else {
                 println!("数据资产 '{}' 已注册", name);
             }
             Ok(())
@@ -139,7 +143,9 @@ fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool)
         DataCommands::Update { name, path, recompute_checksum } => {
             data::update(&repo, name, path.clone(), *recompute_checksum
             )?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"name": name, "status": "updated"}));
+            } else {
                 println!("数据资产 '{}' 已更新", name);
             }
             Ok(())
@@ -187,14 +193,24 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
         }
         ExpCommands::Stop { exp_id, signal } => {
             exp::stop(&repo, exp_id, signal)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"exp_id": exp_id, "status": "stopped"}));
+            } else {
                 println!("实验 {} 已终止", exp_id);
             }
             Ok(())
         }
         ExpCommands::Status { exp_id } => {
             let status = exp::status(&repo, exp_id.as_deref())?;
-            output::print_json(&status);
+            if json_mode {
+                output::print_json(&status);
+            } else {
+                if let Some(obj) = status.as_object() {
+                    for (k, v) in obj {
+                        println!("{}: {}", k, v);
+                    }
+                }
+            }
             Ok(())
         }
         ExpCommands::List { status, since } => {
@@ -222,21 +238,27 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
         }
         ExpCommands::Metric { exp_id, step, metrics_json, keys, vals } => {
             exp::metric(&repo, exp_id, *step, metrics_json.as_deref(), keys, vals)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"exp_id": exp_id, "step": step, "status": "recorded"}));
+            } else {
                 println!("指标已记录到实验 {}", exp_id);
             }
             Ok(())
         }
         ExpCommands::Param { exp_id, params_json } => {
             exp::param(&repo, exp_id, params_json)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"exp_id": exp_id, "status": "updated"}));
+            } else {
                 println!("参数已更新到实验 {}", exp_id);
             }
             Ok(())
         }
         ExpCommands::Finish { exp_id, status, message } => {
             exp::finish(&repo, exp_id, status, message.as_deref())?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"exp_id": exp_id, "status": status}));
+            } else {
                 println!("实验 {} 已标记为 {}", exp_id, status);
             }
             Ok(())
@@ -249,21 +271,27 @@ fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> 
     match cmd {
         DbCommands::Sync { mode } => {
             db::sync(&repo, mode)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"mode": mode, "status": "synced"}));
+            } else {
                 println!("数据库同步完成 (模式: {})", mode);
             }
             Ok(())
         }
         DbCommands::ExportAll { out_dir } => {
             db::export_all(&repo, out_dir.as_deref())?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"status": "exported"}));
+            } else {
                 println!("全量导出完成");
             }
             Ok(())
         }
         DbCommands::Import { from } => {
             db::import_from(&repo, from)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"from": from, "status": "imported"}));
+            } else {
                 println!("导入完成: {}", from);
             }
             Ok(())
@@ -283,11 +311,28 @@ fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> 
     }
 }
 
-fn handle_log(cmd: &LogCommands, repo_override: Option<&str>, _json_mode: bool) -> Result<(), RcliError> {
+fn handle_log(cmd: &LogCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         LogCommands::Show { exp_id, tail, follow } => {
-            log::show(&repo, exp_id, *tail, *follow)?;
+            if json_mode && !follow {
+                let log_path = repo.exp_log_path(exp_id);
+                if !log_path.exists() {
+                    return Err(RcliError::Other(format!("实验 '{}' 的日志文件不存在", exp_id)));
+                }
+                let content = std::fs::read_to_string(&log_path)?;
+                let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                let output_lines = match tail {
+                    Some(n) => {
+                        let start = lines.len().saturating_sub(*n);
+                        lines[start..].to_vec()
+                    }
+                    None => lines,
+                };
+                println!("{}", serde_json::json!({"exp_id": exp_id, "lines": output_lines}));
+            } else {
+                log::show(&repo, exp_id, *tail, *follow)?;
+            }
             Ok(())
         }
     }
