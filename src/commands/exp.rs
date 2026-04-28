@@ -148,8 +148,8 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     let log_path = log_dir.join("run.log");
 
     use std::process::{Command, Stdio};
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     let mut child = Command::new(&shell)
@@ -175,7 +175,8 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         unsafe {
             libc::kill(child_id, libc::SIGTERM);
         }
-    }).ok();
+    })
+    .ok();
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -228,7 +229,14 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     };
 
     db.update_experiment_status(exp_id, new_status, None, Some(&finished_at), exit_code)?;
-    update_exp_json_status(repo, exp_id, new_status, None, Some(&finished_at), exit_code)?;
+    update_exp_json_status(
+        repo,
+        exp_id,
+        new_status,
+        None,
+        Some(&finished_at),
+        exit_code,
+    )?;
 
     let _ = fs::remove_file(&pid_path);
 
@@ -253,22 +261,27 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
     let pid_path = repo.exp_dir(exp_id).join("pid");
     if !pid_path.exists() {
         return Err(RcliError::Other(format!(
-            "实验 '{}' 的 PID 文件不存在，无法终止", exp_id
+            "实验 '{}' 的 PID 文件不存在，无法终止",
+            exp_id
         )));
     }
 
     let pid_str = fs::read_to_string(&pid_path)?;
-    let pid = pid_str.trim().parse::<i32>()
-        .map_err(|_| RcliError::Other(format!(
-            "实验 '{}' 的 PID 文件内容无效: '{}'", exp_id, pid_str.trim()
-        )))?;
+    let pid = pid_str.trim().parse::<i32>().map_err(|_| {
+        RcliError::Other(format!(
+            "实验 '{}' 的 PID 文件内容无效: '{}'",
+            exp_id,
+            pid_str.trim()
+        ))
+    })?;
 
     let sig = match signal {
         "SIGTERM" => libc::SIGTERM,
         "SIGKILL" => libc::SIGKILL,
         _ => {
             return Err(RcliError::InvalidStatus(format!(
-                "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL", signal
+                "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL",
+                signal
             )));
         }
     };
@@ -277,7 +290,8 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
     if ret != 0 {
         let err = std::io::Error::last_os_error();
         return Err(RcliError::Other(format!(
-            "向实验 '{}' 的进程 {} 发送信号失败: {}", exp_id, pid, err
+            "向实验 '{}' 的进程 {} 发送信号失败: {}",
+            exp_id, pid, err
         )));
     }
 
@@ -303,7 +317,11 @@ pub fn status(repo: &Repository, exp_id: Option<&str>) -> Result<serde_json::Val
     }
 }
 
-pub fn list(repo: &Repository, status_filter: Option<&str>, since: Option<&str>) -> Result<Vec<crate::db::ExperimentSummary>> {
+pub fn list(
+    repo: &Repository,
+    status_filter: Option<&str>,
+    since: Option<&str>,
+) -> Result<Vec<crate::db::ExperimentSummary>> {
     let db = Database::open(&repo.db_path())?;
     db.list_experiments(status_filter, since)
 }
@@ -347,7 +365,11 @@ pub fn metric(
         None => return Err(RcliError::DataNotFound(exp_id.to_string())),
     };
 
-    if exp.status != "running" && exp.status != "created" && exp.status != "finished" && exp.status != "failed" {
+    if exp.status != "running"
+        && exp.status != "created"
+        && exp.status != "finished"
+        && exp.status != "failed"
+    {
         return Err(RcliError::Other(format!(
             "实验 '{}' 当前状态为 '{}'，无法记录指标",
             exp_id, exp.status
@@ -372,9 +394,10 @@ pub fn metric(
     if !keys.is_empty() {
         for (i, key) in keys.iter().enumerate() {
             if let Some(val_str) = vals.get(i)
-                && let Ok(val) = val_str.parse::<f64>() {
-                    metrics.push((key.clone(), val));
-                }
+                && let Ok(val) = val_str.parse::<f64>()
+            {
+                metrics.push((key.clone(), val));
+            }
         }
     }
 
@@ -405,7 +428,10 @@ pub fn param(repo: &Repository, exp_id: &str, json_params: &str) -> Result<()> {
 
     let mut merged = match exp.params {
         Some(ref p) if !p.is_empty() && p != "null" => {
-            serde_json::from_str::<serde_json::Value>(p)?.as_object().cloned().unwrap_or_default()
+            serde_json::from_str::<serde_json::Value>(p)?
+                .as_object()
+                .cloned()
+                .unwrap_or_default()
         }
         _ => serde_json::Map::new(),
     };
@@ -498,16 +524,28 @@ fn update_exp_json_status(
     let now = chrono::Local::now().to_rfc3339();
 
     if let Some(obj) = json.as_object_mut() {
-        obj.insert("status".to_string(), serde_json::Value::String(status.to_string()));
+        obj.insert(
+            "status".to_string(),
+            serde_json::Value::String(status.to_string()),
+        );
         obj.insert("updated_at".to_string(), serde_json::Value::String(now));
         if let Some(sa) = started_at {
-            obj.insert("started_at".to_string(), serde_json::Value::String(sa.to_string()));
+            obj.insert(
+                "started_at".to_string(),
+                serde_json::Value::String(sa.to_string()),
+            );
         }
         if let Some(fa) = finished_at {
-            obj.insert("finished_at".to_string(), serde_json::Value::String(fa.to_string()));
+            obj.insert(
+                "finished_at".to_string(),
+                serde_json::Value::String(fa.to_string()),
+            );
         }
         if let Some(ec) = exit_code {
-            obj.insert("exit_code".to_string(), serde_json::Value::Number(ec.into()));
+            obj.insert(
+                "exit_code".to_string(),
+                serde_json::Value::Number(ec.into()),
+            );
         }
     }
 
@@ -540,27 +578,49 @@ mod tests {
         db.init_schema().unwrap();
 
         // Create .gitignore to ignore SQLite temp files
-        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n",
+        )
+        .unwrap();
 
         // Commit all files so workspace is clean for env::check
         let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
-        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index
+            .add_all(["."], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = git_repo.find_tree(tree_id).unwrap();
-        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
+        git_repo
+            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
 
-        (Repository { root: root.to_path_buf() }, dir)
+        (
+            Repository {
+                root: root.to_path_buf(),
+            },
+            dir,
+        )
     }
 
     fn create_test_experiment(repo: &Repository, exp_id: &str, command: &str) {
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            exp_id, "001", "created", "2026-01-01T00:00:00Z",
-            None, None, command, None, None, None,
-        ).unwrap();
+            exp_id,
+            "001",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            command,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         let exp_dir = repo.exp_dir(exp_id);
         fs::create_dir_all(&exp_dir).unwrap();
@@ -577,7 +637,8 @@ mod tests {
         fs::write(
             exp_dir.join("experiment.json"),
             serde_json::to_string_pretty(&json).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
@@ -585,9 +646,17 @@ mod tests {
         let (repo, _dir) = create_test_repo();
 
         let (exp_id, exp_dir) = new(
-            &repo, None, Some("echo hello".to_string()), true,
-            None, None, None, None, None,
-        ).unwrap();
+            &repo,
+            None,
+            Some("echo hello".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         assert!(exp_dir.contains(&repo.root.to_string_lossy().to_string()));
         assert!(repo.exp_dir(&exp_id).exists());
@@ -620,22 +689,40 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/hooks/\n").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            ".research/*.db*\n.research/hooks/\n",
+        )
+        .unwrap();
         let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
-        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index
+            .add_all(["."], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = git_repo.find_tree(tree_id).unwrap();
-        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
+        git_repo
+            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
 
-        let repo = Repository { root: root.to_path_buf() };
+        let repo = Repository {
+            root: root.to_path_buf(),
+        };
 
         let (exp_id, _exp_dir) = new(
-            &repo, None, Some("echo hello".to_string()), true,
-            None, None, None, None, None,
-        ).unwrap();
+            &repo,
+            None,
+            Some("echo hello".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         // Experiment should be created under exps/ not experiments/
         assert!(root.join("exps").join(&exp_id).exists());
@@ -647,10 +734,7 @@ mod tests {
     fn test_new_requires_data_and_cmd() {
         let (repo, _dir) = create_test_repo();
 
-        let result = new(
-            &repo, None, None, false,
-            None, None, None, None, None,
-        );
+        let result = new(&repo, None, None, false, None, None, None, None, None);
         assert!(matches!(result, Err(RcliError::MissingRequiredArg(_))));
     }
 
@@ -659,8 +743,15 @@ mod tests {
         let (repo, _dir) = create_test_repo();
 
         let result = new(
-            &repo, Some("nonexistent".to_string()), Some("echo hello".to_string()), false,
-            None, None, None, None, None,
+            &repo,
+            Some("nonexistent".to_string()),
+            Some("echo hello".to_string()),
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(matches!(result, Err(RcliError::DataNotFound(_))));
     }
@@ -669,10 +760,7 @@ mod tests {
     fn test_new_manual_mode_bypasses_data_requirement() {
         let (repo, _dir) = create_test_repo();
 
-        let (exp_id, _) = new(
-            &repo, None, None, true,
-            None, None, None, None, None,
-        ).unwrap();
+        let (exp_id, _) = new(&repo, None, None, true, None, None, None, None, None).unwrap();
 
         let db = Database::open(&repo.db_path()).unwrap();
         let exp = db.get_experiment(&exp_id).unwrap().unwrap();
@@ -688,8 +776,15 @@ mod tests {
         fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
 
         let result = new(
-            &repo, None, Some("echo hello".to_string()), true,
-            None, None, None, None, None,
+            &repo,
+            None,
+            Some("echo hello".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(matches!(result, Err(RcliError::WorkspaceNotClean)));
     }
@@ -699,25 +794,45 @@ mod tests {
         let (repo, _dir) = create_test_repo();
 
         let (id1, _) = new(
-            &repo, None, Some("echo 1".to_string()), true,
-            None, None, None, None, None,
-        ).unwrap();
+            &repo,
+            None,
+            Some("echo 1".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         // 提交实验文件以保持工作区干净
         let git_repo = git2::Repository::open(&repo.root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
-        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index
+            .add_all(["."], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = git_repo.find_tree(tree_id).unwrap();
         let parent = git_repo.head().unwrap().peel_to_commit().unwrap();
-        git_repo.commit(Some("HEAD"), &sig, &sig, "exp1", &tree, &[&parent]).unwrap();
+        git_repo
+            .commit(Some("HEAD"), &sig, &sig, "exp1", &tree, &[&parent])
+            .unwrap();
 
         let (id2, _) = new(
-            &repo, None, Some("echo 2".to_string()), true,
-            None, None, None, None, None,
-        ).unwrap();
+            &repo,
+            None,
+            Some("echo 2".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         assert_ne!(id1, id2, "两次 new 调用应生成不同的实验 ID");
 
@@ -730,15 +845,13 @@ mod tests {
     #[test]
     fn test_run_creates_and_cleans_pid_file() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-001", "echo hello"
-        );
+        create_test_experiment(&repo, "exp-001", "echo hello");
 
         let pid_path = repo.exp_dir("exp-001").join("pid");
 
         assert!(!pid_path.exists());
 
-        run(&repo, "exp-001", &[]
-        ).unwrap();
+        run(&repo, "exp-001", &[]).unwrap();
 
         assert!(!pid_path.exists());
 
@@ -751,13 +864,11 @@ mod tests {
     #[test]
     fn test_run_failure_cleans_pid_file() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-002", "exit 42"
-        );
+        create_test_experiment(&repo, "exp-002", "exit 42");
 
         let pid_path = repo.exp_dir("exp-002").join("pid");
 
-        let code = run(&repo, "exp-002", &[]
-        ).unwrap();
+        let code = run(&repo, "exp-002", &[]).unwrap();
         assert_eq!(code, 42);
 
         assert!(!pid_path.exists());
@@ -771,15 +882,15 @@ mod tests {
     #[test]
     fn test_run_pid_file_exists_during_execution() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-003", "sleep 2"
-        );
+        create_test_experiment(&repo, "exp-003", "sleep 2");
 
         let pid_path = repo.exp_dir("exp-003").join("pid");
-        let repo_clone = Repository { root: repo.root.clone() };
+        let repo_clone = Repository {
+            root: repo.root.clone(),
+        };
 
         let run_handle = thread::spawn(move || {
-            run(&repo_clone, "exp-003", &[]
-            ).unwrap();
+            run(&repo_clone, "exp-003", &[]).unwrap();
         });
 
         let mut found = false;
@@ -799,16 +910,18 @@ mod tests {
     #[test]
     fn test_run_stop_end_to_end() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-008", "sleep 10"
-        );
+        create_test_experiment(&repo, "exp-008", "sleep 10");
 
         let pid_path = repo.exp_dir("exp-008").join("pid");
-        let repo_run = Repository { root: repo.root.clone() };
-        let repo_stop = Repository { root: repo.root.clone() };
+        let repo_run = Repository {
+            root: repo.root.clone(),
+        };
+        let repo_stop = Repository {
+            root: repo.root.clone(),
+        };
 
         let run_handle = thread::spawn(move || {
-            run(&repo_run, "exp-008", &[]
-            ).unwrap();
+            run(&repo_run, "exp-008", &[]).unwrap();
         });
 
         let mut found = false;
@@ -821,8 +934,7 @@ mod tests {
         }
         assert!(found, "PID 文件应在 run 启动后出现");
 
-        stop(&repo_stop, "exp-008", "SIGTERM"
-        ).unwrap();
+        stop(&repo_stop, "exp-008", "SIGTERM").unwrap();
 
         run_handle.join().unwrap();
 
@@ -837,22 +949,26 @@ mod tests {
     #[test]
     fn test_stop_non_running_fails() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-004", "echo hello"
-        );
+        create_test_experiment(&repo, "exp-004", "echo hello");
 
-        let result = stop(&repo, "exp-004", "SIGTERM"
-        );
+        let result = stop(&repo, "exp-004", "SIGTERM");
         assert!(matches!(result, Err(RcliError::Other(_))));
     }
 
     #[test]
     fn test_stop_sends_signal() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-005", "sleep 10"
-        );
+        create_test_experiment(&repo, "exp-005", "sleep 10");
 
         let db = Database::open(&repo.db_path()).unwrap();
-        db.update_experiment_status("exp-005", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+        db.update_experiment_status(
+            "exp-005",
+            "running",
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            None,
+        )
+        .unwrap();
 
         let mut child = StdCommand::new("sleep")
             .arg("10")
@@ -864,15 +980,17 @@ mod tests {
 
         fs::write(repo.exp_dir("exp-005").join("pid"), pid.to_string()).unwrap();
 
-        stop(&repo, "exp-005", "SIGTERM"
-        ).unwrap();
+        stop(&repo, "exp-005", "SIGTERM").unwrap();
 
         thread::sleep(Duration::from_millis(200));
         let status = child.try_wait().unwrap();
         assert!(status.is_some(), "子进程应已被信号终止");
 
         // stop() writes stop-intent so run() will converge to "interrupted"
-        assert!(repo.exp_dir("exp-005").join(".stop").exists(), "stop() 应写入 .stop 意图文件");
+        assert!(
+            repo.exp_dir("exp-005").join(".stop").exists(),
+            "stop() 应写入 .stop 意图文件"
+        );
 
         // stop() 不再修改 DB 状态或删除 PID 文件，这些由 run() 负责
         let exp = db.get_experiment("exp-005").unwrap().unwrap();
@@ -886,11 +1004,17 @@ mod tests {
     #[test]
     fn test_stop_invalid_signal_fails() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-009", "sleep 10"
-        );
+        create_test_experiment(&repo, "exp-009", "sleep 10");
 
         let db = Database::open(&repo.db_path()).unwrap();
-        db.update_experiment_status("exp-009", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+        db.update_experiment_status(
+            "exp-009",
+            "running",
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            None,
+        )
+        .unwrap();
 
         let mut child = StdCommand::new("sleep")
             .arg("10")
@@ -901,27 +1025,33 @@ mod tests {
         let pid = child.id() as i32;
         fs::write(repo.exp_dir("exp-009").join("pid"), pid.to_string()).unwrap();
 
-        let result = stop(&repo, "exp-009", "SIGINT"
-        );
+        let result = stop(&repo, "exp-009", "SIGINT");
         assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
 
-        let result = stop(&repo, "exp-009", "INVALID"
-        );
+        let result = stop(&repo, "exp-009", "INVALID");
         assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
 
         // 清理子进程
-        unsafe { libc::kill(pid, libc::SIGKILL); }
+        unsafe {
+            libc::kill(pid, libc::SIGKILL);
+        }
         let _ = child.wait();
     }
 
     #[test]
     fn test_stop_does_not_prematurely_finalize_state() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-010", "sleep 10"
-        );
+        create_test_experiment(&repo, "exp-010", "sleep 10");
 
         let db = Database::open(&repo.db_path()).unwrap();
-        db.update_experiment_status("exp-010", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+        db.update_experiment_status(
+            "exp-010",
+            "running",
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            None,
+        )
+        .unwrap();
 
         let mut child = StdCommand::new("sleep")
             .arg("10")
@@ -934,20 +1064,27 @@ mod tests {
         fs::write(repo.exp_dir("exp-010").join("pid"), pid.to_string()).unwrap();
 
         // 发送 SIGTERM，stop() 应返回成功（信号已投递）
-        stop(&repo, "exp-010", "SIGTERM"
-        ).unwrap();
+        stop(&repo, "exp-010", "SIGTERM").unwrap();
 
         // stop() 应写入 .stop 意图文件，但不修改 DB 状态或删除 PID 文件
-        assert!(repo.exp_dir("exp-010").join(".stop").exists(), "stop() 应写入 .stop 意图文件");
+        assert!(
+            repo.exp_dir("exp-010").join(".stop").exists(),
+            "stop() 应写入 .stop 意图文件"
+        );
         let exp = db.get_experiment("exp-010").unwrap().unwrap();
         assert_eq!(exp.status, "running", "stop() 不应修改实验状态");
-        assert!(repo.exp_dir("exp-010").join("pid").exists(), "stop() 不应删除 PID 文件");
+        assert!(
+            repo.exp_dir("exp-010").join("pid").exists(),
+            "stop() 不应删除 PID 文件"
+        );
 
         // 清理：等待子进程被信号终止后清理
         thread::sleep(Duration::from_millis(300));
         let _ = child.try_wait();
         if child.try_wait().unwrap().is_none() {
-            unsafe { libc::kill(pid, libc::SIGKILL); }
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
             let _ = child.wait();
         }
         let _ = fs::remove_file(repo.exp_dir("exp-010").join(".stop"));
@@ -956,15 +1093,12 @@ mod tests {
     #[test]
     fn test_status_and_list() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-006", "echo hello"
-        );
+        create_test_experiment(&repo, "exp-006", "echo hello");
 
-        let val = status(&repo, Some("exp-006")
-        ).unwrap();
+        let val = status(&repo, Some("exp-006")).unwrap();
         assert_eq!(val.get("id").unwrap().as_str().unwrap(), "exp-006");
 
-        let exps = list(&repo, None, None
-        ).unwrap();
+        let exps = list(&repo, None, None).unwrap();
         assert_eq!(exps.len(), 1);
         assert_eq!(exps[0].id, "exp-006");
     }
@@ -972,24 +1106,20 @@ mod tests {
     #[test]
     fn test_metric_and_param_and_finish() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-007", "echo hello"
-        );
+        create_test_experiment(&repo, "exp-007", "echo hello");
 
-        metric(&repo, "exp-007", 1, Some("{\"loss\":0.5}"), &[], &[]
-        ).unwrap();
+        metric(&repo, "exp-007", 1, Some("{\"loss\":0.5}"), &[], &[]).unwrap();
 
         let db = Database::open(&repo.db_path()).unwrap();
         let metrics = db.get_metrics("exp-007").unwrap();
         assert_eq!(metrics.len(), 1);
         assert_eq!(metrics[0].metric_value, 0.5);
 
-        param(&repo, "exp-007", "{\"lr\":0.001}"
-        ).unwrap();
+        param(&repo, "exp-007", "{\"lr\":0.001}").unwrap();
         let exp = db.get_experiment("exp-007").unwrap().unwrap();
         assert!(exp.params.as_ref().unwrap().contains("lr"));
 
-        finish(&repo, "exp-007", "finished", None
-        ).unwrap();
+        finish(&repo, "exp-007", "finished", None).unwrap();
         let exp = db.get_experiment("exp-007").unwrap().unwrap();
         assert_eq!(exp.status, "finished");
         assert!(exp.finished_at.is_some());

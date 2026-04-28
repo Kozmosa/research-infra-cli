@@ -83,12 +83,14 @@ pub fn status(repo: &Repository) -> Result<SyncStatus> {
                 in_sync.push(exp_summary.id.clone());
             } else {
                 let db_time = exp.updated_at.as_str();
-                let json_time = json_exp.get("updated_at")
+                let json_time = json_exp
+                    .get("updated_at")
                     .and_then(|v| v.as_str())
                     .unwrap_or(
-                        json_exp.get("created_at")
+                        json_exp
+                            .get("created_at")
                             .and_then(|v| v.as_str())
-                            .unwrap_or("")
+                            .unwrap_or(""),
                     );
 
                 if db_time > json_time {
@@ -196,12 +198,14 @@ fn sync_auto(repo: &Repository) -> Result<()> {
             }
 
             let db_time = exp.updated_at.as_str();
-            let json_time = json_exp.get("updated_at")
+            let json_time = json_exp
+                .get("updated_at")
                 .and_then(|v| v.as_str())
                 .unwrap_or(
-                    json_exp.get("created_at")
+                    json_exp
+                        .get("created_at")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("")
+                        .unwrap_or(""),
                 );
 
             if db_time > json_time {
@@ -244,32 +248,75 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
     let content = fs::read_to_string(path)?;
     let json: serde_json::Value = serde_json::from_str(&content)?;
 
-    let id = json.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let short_id = json.get("short_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("created").to_string();
-    let created_at = json.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let updated_at = json.get("updated_at").and_then(|v| v.as_str()).unwrap_or(&created_at).to_string();
+    let id = json
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let short_id = json
+        .get("short_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let status = json
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("created")
+        .to_string();
+    let created_at = json
+        .get("created_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let updated_at = json
+        .get("updated_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&created_at)
+        .to_string();
     let commit_hash = json.get("commit_hash").and_then(|v| v.as_str());
     let data_used = json.get("data_used").and_then(|v| v.as_str());
-    let command = json.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let command = json
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let params = json.get("params").map(|v| v.to_string());
     let notes = json.get("notes").and_then(|v| v.as_str());
     let env = json.get("env").and_then(|v| v.as_str());
 
     let started_at = json.get("started_at").and_then(|v| v.as_str());
     let finished_at = json.get("finished_at").and_then(|v| v.as_str());
-    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).map(|v| v as i32);
+    let exit_code = json
+        .get("exit_code")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
 
     if db.get_experiment(&id)?.is_some() {
         db.upsert_experiment(
-            &id, &short_id, &status, &created_at, &updated_at,
-            commit_hash, data_used, &command,
-            params.as_deref(), notes, env,
+            &id,
+            &short_id,
+            &status,
+            &created_at,
+            &updated_at,
+            commit_hash,
+            data_used,
+            &command,
+            params.as_deref(),
+            notes,
+            env,
         )?;
     } else {
         db.insert_experiment(
-            &id, &short_id, &status, &created_at, commit_hash, data_used, &command,
-            params.as_deref(), notes, env,
+            &id,
+            &short_id,
+            &status,
+            &created_at,
+            commit_hash,
+            data_used,
+            &command,
+            params.as_deref(),
+            notes,
+            env,
         )?;
     }
 
@@ -284,25 +331,53 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
 pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {
     let mut map = serde_json::Map::new();
     map.insert("id".to_string(), serde_json::Value::String(exp.id.clone()));
-    map.insert("short_id".to_string(), serde_json::Value::String(exp.short_id.clone()));
-    map.insert("status".to_string(), serde_json::Value::String(exp.status.clone()));
-    map.insert("created_at".to_string(), serde_json::Value::String(exp.created_at.clone()));
-    map.insert("updated_at".to_string(), serde_json::Value::String(exp.updated_at.clone()));
+    map.insert(
+        "short_id".to_string(),
+        serde_json::Value::String(exp.short_id.clone()),
+    );
+    map.insert(
+        "status".to_string(),
+        serde_json::Value::String(exp.status.clone()),
+    );
+    map.insert(
+        "created_at".to_string(),
+        serde_json::Value::String(exp.created_at.clone()),
+    );
+    map.insert(
+        "updated_at".to_string(),
+        serde_json::Value::String(exp.updated_at.clone()),
+    );
     if let Some(ref sa) = exp.started_at {
-        map.insert("started_at".to_string(), serde_json::Value::String(sa.clone()));
+        map.insert(
+            "started_at".to_string(),
+            serde_json::Value::String(sa.clone()),
+        );
     }
     if let Some(ref fa) = exp.finished_at {
-        map.insert("finished_at".to_string(), serde_json::Value::String(fa.clone()));
+        map.insert(
+            "finished_at".to_string(),
+            serde_json::Value::String(fa.clone()),
+        );
     }
     if let Some(ref ch) = exp.commit_hash {
-        map.insert("commit_hash".to_string(), serde_json::Value::String(ch.clone()));
+        map.insert(
+            "commit_hash".to_string(),
+            serde_json::Value::String(ch.clone()),
+        );
     }
     if let Some(ref du) = exp.data_used {
-        map.insert("data_used".to_string(), serde_json::Value::String(du.clone()));
+        map.insert(
+            "data_used".to_string(),
+            serde_json::Value::String(du.clone()),
+        );
     }
-    map.insert("command".to_string(), serde_json::Value::String(exp.command.clone()));
+    map.insert(
+        "command".to_string(),
+        serde_json::Value::String(exp.command.clone()),
+    );
     if let Some(ref p) = exp.params {
-        let parsed: serde_json::Value = serde_json::from_str(p).unwrap_or(serde_json::Value::String(p.clone()));
+        let parsed: serde_json::Value =
+            serde_json::from_str(p).unwrap_or(serde_json::Value::String(p.clone()));
         map.insert("params".to_string(), parsed);
     }
     if let Some(ref n) = exp.notes {
@@ -312,7 +387,10 @@ pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Val
         map.insert("env".to_string(), serde_json::Value::String(e.clone()));
     }
     if let Some(ref ec) = exp.exit_code {
-        map.insert("exit_code".to_string(), serde_json::Value::Number((*ec).into()));
+        map.insert(
+            "exit_code".to_string(),
+            serde_json::Value::Number((*ec).into()),
+        );
     }
     Ok(serde_json::Value::Object(map))
 }
@@ -337,7 +415,12 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        (Repository { root: root.to_path_buf() }, dir)
+        (
+            Repository {
+                root: root.to_path_buf(),
+            },
+            dir,
+        )
     }
 
     #[test]
@@ -346,9 +429,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-001", "001", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-001",
+            "001",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         sync_export(&repo).unwrap();
 
@@ -374,7 +466,11 @@ mod tests {
             "created_at": "2026-01-02T00:00:00Z",
             "command": "python eval.py",
         });
-        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        fs::write(
+            exp_dir.join("experiment.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
 
         sync_import(&repo).unwrap();
 
@@ -390,9 +486,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-003", "003", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-003",
+            "003",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         let sync_status = status(&repo).unwrap();
         assert_eq!(sync_status.need_export.len(), 1);
@@ -406,9 +511,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-004", "004", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-004",
+            "004",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         sync_export(&repo).unwrap();
 
@@ -423,9 +537,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-005", "005", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-005",
+            "005",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         // 创建与 DB 内容不同的 JSON 文件（相同 created_at，不同内容）
         let exp_dir = repo.exp_dir("exp-005");
@@ -437,7 +560,11 @@ mod tests {
             "created_at": "2026-01-01T00:00:00Z",
             "command": "python eval.py",
         });
-        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        fs::write(
+            exp_dir.join("experiment.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
 
         let result = sync_auto(&repo);
         assert!(matches!(result, Err(RcliError::SyncConflict(_))));
@@ -449,11 +576,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-006", "006", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py",
+            "exp-006",
+            "006",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
             Some(r#"{"lr":0.01,"epochs":10}"#),
-            None, None,
-        ).unwrap();
+            None,
+            None,
+        )
+        .unwrap();
 
         // Export to JSON
         sync_export(&repo).unwrap();
@@ -463,7 +597,10 @@ mod tests {
         let content = fs::read_to_string(&json_path).unwrap();
         let json: serde_json::Value = serde_json::from_str(&content).unwrap();
         let params = json.get("params").unwrap();
-        assert!(params.is_object(), "params should be exported as JSON object, not string");
+        assert!(
+            params.is_object(),
+            "params should be exported as JSON object, not string"
+        );
         assert_eq!(params.get("lr").unwrap().as_f64().unwrap(), 0.01);
         assert_eq!(params.get("epochs").unwrap().as_i64().unwrap(), 10);
 
@@ -481,9 +618,18 @@ mod tests {
 
         let db = Database::open(&repo.db_path()).unwrap();
         db.insert_experiment(
-            "exp-007", "007", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-007",
+            "007",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         // Create JSON with same created_at/updated_at but different content
         let exp_dir = repo.exp_dir("exp-007");
@@ -496,7 +642,11 @@ mod tests {
             "updated_at": "2026-01-01T00:00:00Z",
             "command": "python eval.py",
         });
-        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        fs::write(
+            exp_dir.join("experiment.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
 
         let sync_status = status(&repo).unwrap();
         assert_eq!(sync_status.conflicts.len(), 1);
@@ -519,7 +669,11 @@ mod tests {
             "created_at": "2026-01-02T00:00:00Z",
             "command": "python eval.py",
         });
-        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        fs::write(
+            exp_dir.join("experiment.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
 
         sync_auto(&repo).unwrap();
 

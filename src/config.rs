@@ -94,7 +94,9 @@ impl Config {
         let parts: Vec<&str> = key.split('.').collect();
         match parts.as_slice() {
             ["project_name"] => self.project_name = value.to_string(),
-            ["experiments", "dir"] | ["experiments_dir"] => self.experiments_dir = value.to_string(),
+            ["experiments", "dir"] | ["experiments_dir"] => {
+                self.experiments_dir = value.to_string()
+            }
             ["templates", "dir"] => self.templates.dir = value.to_string(),
             _ => {
                 if parts.len() == 1 {

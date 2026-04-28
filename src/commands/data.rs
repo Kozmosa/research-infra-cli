@@ -1,14 +1,20 @@
 use std::fs;
 use std::path::Path;
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::db::Database;
 use crate::error::{RcliError, Result};
 use crate::repo::Repository;
 
-pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>, checksum: Option<String>) -> Result<()> {
+pub fn register(
+    repo: &Repository,
+    path: &str,
+    name: &str,
+    desc: Option<String>,
+    checksum: Option<String>,
+) -> Result<()> {
     let abs_path = if Path::new(path).is_relative() {
         repo.root.join(path)
     } else {
@@ -24,7 +30,8 @@ pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>,
         None => compute_dir_checksum(&abs_path)?,
     };
 
-    let relative_path = abs_path.strip_prefix(&repo.root)
+    let relative_path = abs_path
+        .strip_prefix(&repo.root)
         .unwrap_or(&abs_path)
         .to_string_lossy()
         .to_string();
@@ -50,7 +57,13 @@ pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>,
     save_data_index(&index_path, &datasets)?;
 
     let db = Database::open(&repo.db_path())?;
-    db.insert_dataset(name, &dataset.path, dataset.checksum.as_deref(), dataset.description.as_deref(), &dataset.registered_at)?;
+    db.insert_dataset(
+        name,
+        &dataset.path,
+        dataset.checksum.as_deref(),
+        dataset.description.as_deref(),
+        &dataset.registered_at,
+    )?;
 
     Ok(())
 }
@@ -61,14 +74,21 @@ pub fn list(repo: &Repository) -> Result<Vec<crate::db::Dataset>> {
 
 pub fn info(repo: &Repository, name: &str) -> Result<crate::db::Dataset> {
     let datasets = load_data_index(&repo.data_index_path())?;
-    datasets.into_iter()
+    datasets
+        .into_iter()
         .find(|d| d.name == name)
         .ok_or_else(|| RcliError::DataNotFound(name.to_string()))
 }
 
-pub fn update(repo: &Repository, name: &str, new_path: Option<String>, recompute_checksum: bool) -> Result<()> {
+pub fn update(
+    repo: &Repository,
+    name: &str,
+    new_path: Option<String>,
+    recompute_checksum: bool,
+) -> Result<()> {
     let mut datasets = load_data_index(&repo.data_index_path())?;
-    let idx = datasets.iter()
+    let idx = datasets
+        .iter()
         .position(|d| d.name == name)
         .ok_or_else(|| RcliError::DataNotFound(name.to_string()))?;
 
@@ -78,7 +98,8 @@ pub fn update(repo: &Repository, name: &str, new_path: Option<String>, recompute
         } else {
             Path::new(&path).to_path_buf()
         };
-        let relative_path = abs_path.strip_prefix(&repo.root)
+        let relative_path = abs_path
+            .strip_prefix(&repo.root)
             .unwrap_or(&abs_path)
             .to_string_lossy()
             .to_string();
@@ -168,7 +189,12 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        (Repository { root: root.to_path_buf() }, dir)
+        (
+            Repository {
+                root: root.to_path_buf(),
+            },
+            dir,
+        )
     }
 
     #[test]
@@ -177,8 +203,14 @@ mod tests {
         let data_path = repo.root.join("data/raw");
         fs::write(data_path.join("test.txt"), "hello").unwrap();
 
-        register(&repo, "data/raw", "test-data", Some("desc".to_string()), None
-        ).unwrap();
+        register(
+            &repo,
+            "data/raw",
+            "test-data",
+            Some("desc".to_string()),
+            None,
+        )
+        .unwrap();
 
         let datasets = list(&repo).unwrap();
         assert_eq!(datasets.len(), 1);
@@ -193,10 +225,14 @@ mod tests {
         let data_path = repo.root.join("data/raw");
         fs::write(data_path.join("test.txt"), "hello").unwrap();
 
-        register(&repo, "data/raw", "test-data", None, None
-        ).unwrap();
+        register(&repo, "data/raw", "test-data", None, None).unwrap();
 
-        let result = register(&repo, "data/raw", "test-data", Some("new desc".to_string()), None
+        let result = register(
+            &repo,
+            "data/raw",
+            "test-data",
+            Some("new desc".to_string()),
+            None,
         );
         assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
 
@@ -211,10 +247,21 @@ mod tests {
         let data_path = repo.root.join("data/raw");
         fs::write(data_path.join("test.txt"), "hello").unwrap();
 
-        register(&repo, "data/raw", "test-data", Some("original".to_string()), None
-        ).unwrap();
+        register(
+            &repo,
+            "data/raw",
+            "test-data",
+            Some("original".to_string()),
+            None,
+        )
+        .unwrap();
 
-        let result = register(&repo, "data/raw", "test-data", Some("new desc".to_string()), None
+        let result = register(
+            &repo,
+            "data/raw",
+            "test-data",
+            Some("new desc".to_string()),
+            None,
         );
         assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
 
@@ -230,14 +277,19 @@ mod tests {
         let data_path = repo.root.join("data/raw");
         fs::write(data_path.join("test.txt"), "hello").unwrap();
 
-        register(&repo, "data/raw", "test-data", Some("original".to_string()), None
-        ).unwrap();
+        register(
+            &repo,
+            "data/raw",
+            "test-data",
+            Some("original".to_string()),
+            None,
+        )
+        .unwrap();
 
         let ds = info(&repo, "test-data").unwrap();
         assert_eq!(ds.name, "test-data");
 
-        update(&repo, "test-data", Some("data/new".to_string()), false
-        ).unwrap();
+        update(&repo, "test-data", Some("data/new".to_string()), false).unwrap();
 
         let ds = info(&repo, "test-data").unwrap();
         assert_eq!(ds.path, "data/new");
@@ -246,8 +298,7 @@ mod tests {
     #[test]
     fn test_update_nonexistent_fails() {
         let (repo, _dir) = create_test_repo();
-        let result = update(&repo, "missing", Some("data/new".to_string()), false
-        );
+        let result = update(&repo, "missing", Some("data/new".to_string()), false);
         assert!(matches!(result, Err(RcliError::DataNotFound(_))));
     }
 
@@ -258,10 +309,22 @@ mod tests {
         fs::write(data_path.join("a.txt"), "a").unwrap();
         fs::write(data_path.join("b.txt"), "b").unwrap();
 
-        register(&repo, "data/raw", "dataset-a", Some("desc-a".to_string()), None
-        ).unwrap();
-        register(&repo, "data/raw", "dataset-b", Some("desc-b".to_string()), None
-        ).unwrap();
+        register(
+            &repo,
+            "data/raw",
+            "dataset-a",
+            Some("desc-a".to_string()),
+            None,
+        )
+        .unwrap();
+        register(
+            &repo,
+            "data/raw",
+            "dataset-b",
+            Some("desc-b".to_string()),
+            None,
+        )
+        .unwrap();
 
         let datasets = list(&repo).unwrap();
         assert_eq!(datasets.len(), 2);

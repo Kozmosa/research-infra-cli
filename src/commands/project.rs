@@ -39,9 +39,7 @@ pub fn init(
 
     let research_dir = target.join(".research");
     if research_dir.join("config.yaml").exists() {
-        return Err(RcliError::Other(
-            "该目录已是研究仓库".to_string(),
-        ));
+        return Err(RcliError::Other("该目录已是研究仓库".to_string()));
     }
 
     let mut created = Vec::new();
@@ -84,7 +82,8 @@ pub fn init(
              Cargo.lock\n\
              \n\
              # 大数据建议使用 DVC 管理\n\
-             # data/raw/large-datasets/\n".to_string();
+             # data/raw/large-datasets/\n"
+            .to_string();
         fs::write(&gitignore, content)?;
         created.push(gitignore.to_string_lossy().to_string());
     }
@@ -92,7 +91,8 @@ pub fn init(
     let readme = target.join("README.md");
     if !readme.exists() {
         let project_name = name.clone().unwrap_or_else(|| {
-            target.file_name()
+            target
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "research-project".to_string())
         });
@@ -103,7 +103,8 @@ pub fn init(
 
     let config = Config {
         project_name: name.unwrap_or_else(|| {
-            target.file_name()
+            target
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "research-project".to_string())
         }),
@@ -142,7 +143,8 @@ mod tests {
             Some("my-project".to_string()),
             false,
             "experiments".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(target.join("data/raw").exists());
         assert!(target.join("data/processed").exists());
@@ -194,7 +196,8 @@ mod tests {
             None,
             true,
             "experiments".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(target.join(".research/config.yaml").exists());
     }
@@ -209,7 +212,8 @@ mod tests {
             None,
             false,
             "experiments".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let result = init(
             Some(target.to_string_lossy().to_string()),

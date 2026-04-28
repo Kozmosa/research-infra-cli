@@ -117,22 +117,46 @@ mod tests {
     fn test_error_codes_are_consistent() {
         let errors = vec![
             (RcliError::WorkspaceNotClean, "WORKSPACE_NOT_CLEAN"),
-            (RcliError::ReadinessCheckFailed("hooks missing".to_string()), "READINESS_CHECK_FAILED"),
+            (
+                RcliError::ReadinessCheckFailed("hooks missing".to_string()),
+                "READINESS_CHECK_FAILED",
+            ),
             (RcliError::DataNotFound("x".to_string()), "DATA_NOT_FOUND"),
-            (RcliError::DataAlreadyExists("x".to_string()), "DATA_ALREADY_EXISTS"),
+            (
+                RcliError::DataAlreadyExists("x".to_string()),
+                "DATA_ALREADY_EXISTS",
+            ),
             (RcliError::ExpIdExists("x".to_string()), "EXP_ID_EXISTS"),
-            (RcliError::MissingRequiredArg("x".to_string()), "MISSING_REQUIRED_ARG"),
+            (
+                RcliError::MissingRequiredArg("x".to_string()),
+                "MISSING_REQUIRED_ARG",
+            ),
             (RcliError::RepoNotFound, "REPO_NOT_FOUND"),
             (RcliError::InvalidStatus("x".to_string()), "INVALID_STATUS"),
-            (RcliError::ConfigKeyNotFound("x".to_string()), "CONFIG_KEY_NOT_FOUND"),
-            (RcliError::SyncConflict(vec!["x".to_string()]), "SYNC_CONFLICT"),
+            (
+                RcliError::ConfigKeyNotFound("x".to_string()),
+                "CONFIG_KEY_NOT_FOUND",
+            ),
+            (
+                RcliError::SyncConflict(vec!["x".to_string()]),
+                "SYNC_CONFLICT",
+            ),
             (RcliError::Io(std::io::Error::other("x")), "IO_ERROR"),
-            (RcliError::Sqlite(rusqlite::Error::InvalidQuery), "SQLITE_ERROR"),
+            (
+                RcliError::Sqlite(rusqlite::Error::InvalidQuery),
+                "SQLITE_ERROR",
+            ),
             (RcliError::Other("x".to_string()), "UNKNOWN_ERROR"),
         ];
 
         for (err, expected_code) in errors {
-            assert_eq!(err.error_code(), expected_code, "错误 {:?} 的 error_code 应为 {}", err, expected_code);
+            assert_eq!(
+                err.error_code(),
+                expected_code,
+                "错误 {:?} 的 error_code 应为 {}",
+                err,
+                expected_code
+            );
             let msg = format!("{}", err);
             assert!(!msg.is_empty(), "错误 {:?} 的消息不应为空", err);
         }

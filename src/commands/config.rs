@@ -29,7 +29,12 @@ mod tests {
         let config = crate::config::Config::default();
         config.save(&root.join(".research/config.yaml")).unwrap();
 
-        (Repository { root: root.to_path_buf() }, dir)
+        (
+            Repository {
+                root: root.to_path_buf(),
+            },
+            dir,
+        )
     }
 
     #[test]

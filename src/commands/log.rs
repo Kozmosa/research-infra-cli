@@ -21,7 +21,10 @@ fn show_inner(
 ) -> Result<()> {
     let log_path = repo.exp_log_path(exp_id);
     if !log_path.exists() {
-        return Err(RcliError::Other(format!("实验 '{}' 的日志文件不存在", exp_id)));
+        return Err(RcliError::Other(format!(
+            "实验 '{}' 的日志文件不存在",
+            exp_id
+        )));
     }
 
     let file = fs::File::open(&log_path)?;
@@ -44,9 +47,10 @@ fn show_inner(
         loop {
             thread::sleep(Duration::from_millis(500));
             if let Some(stop) = stop_signal
-                && stop.load(Ordering::Relaxed) {
-                    break;
-                }
+                && stop.load(Ordering::Relaxed)
+            {
+                break;
+            }
             let metadata = fs::metadata(&log_path)?;
             let len = metadata.len();
             if len > pos {
@@ -86,7 +90,12 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        (Repository { root: root.to_path_buf() }, dir)
+        (
+            Repository {
+                root: root.to_path_buf(),
+            },
+            dir,
+        )
     }
 
     #[test]
@@ -131,10 +140,20 @@ mod tests {
         let stop_clone = Arc::clone(&stop);
 
         // follow 模式会阻塞，在线程中运行
-        let repo_clone = Repository { root: repo.root.clone() };
+        let repo_clone = Repository {
+            root: repo.root.clone(),
+        };
         let handle = thread::spawn(move || {
             let mut buf = Vec::new();
-            show_inner(&repo_clone, "exp-004", None, true, &mut buf, Some(&stop_clone)).unwrap();
+            show_inner(
+                &repo_clone,
+                "exp-004",
+                None,
+                true,
+                &mut buf,
+                Some(&stop_clone),
+            )
+            .unwrap();
             buf
         });
 
@@ -161,6 +180,9 @@ mod tests {
 
         // 验证初始内容和追加内容都被捕获
         assert!(output_str.contains("initial"), "输出应包含初始内容");
-        assert!(output_str.contains("new line"), "follow 模式应检测到并输出追加的新内容");
+        assert!(
+            output_str.contains("new line"),
+            "follow 模式应检测到并输出追加的新内容"
+        );
     }
 }

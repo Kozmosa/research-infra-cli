@@ -17,7 +17,7 @@ impl Database {
         )?;
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
-             PRAGMA foreign_keys = ON;"
+             PRAGMA foreign_keys = ON;",
         )?;
         Ok(Database { conn })
     }
@@ -66,7 +66,7 @@ impl Database {
                 description TEXT,
                 registered_at TEXT NOT NULL
             );
-            "
+            ",
         )?;
         Ok(())
     }
@@ -140,9 +140,13 @@ impl Database {
         }
     }
 
-    pub fn list_experiments(&self, status_filter: Option<&str>, since: Option<&str>) -> Result<Vec<ExperimentSummary>> {
+    pub fn list_experiments(
+        &self,
+        status_filter: Option<&str>,
+        since: Option<&str>,
+    ) -> Result<Vec<ExperimentSummary>> {
         let mut sql = String::from(
-            "SELECT id, short_id, status, created_at, data_used, command FROM experiments WHERE 1=1"
+            "SELECT id, short_id, status, created_at, data_used, command FROM experiments WHERE 1=1",
         );
         if status_filter.is_some() {
             sql.push_str(" AND status = ?1");
@@ -183,7 +187,14 @@ impl Database {
         self.list_experiments(Some("running"), None)
     }
 
-    pub fn insert_dataset(&self, name: &str, path: &str, checksum: Option<&str>, description: Option<&str>, registered_at: &str) -> Result<()> {
+    pub fn insert_dataset(
+        &self,
+        name: &str,
+        path: &str,
+        checksum: Option<&str>,
+        description: Option<&str>,
+        registered_at: &str,
+    ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO datasets (name, path, checksum, description, registered_at)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -192,14 +203,20 @@ impl Database {
                 checksum = excluded.checksum,
                 description = excluded.description,
                 registered_at = excluded.registered_at",
-            [name, path, checksum.unwrap_or(""), description.unwrap_or(""), registered_at],
+            [
+                name,
+                path,
+                checksum.unwrap_or(""),
+                description.unwrap_or(""),
+                registered_at,
+            ],
         )?;
         Ok(())
     }
 
     pub fn get_dataset(&self, name: &str) -> Result<Option<Dataset>> {
         let mut stmt = self.conn.prepare(
-            "SELECT name, path, checksum, description, registered_at FROM datasets WHERE name = ?1"
+            "SELECT name, path, checksum, description, registered_at FROM datasets WHERE name = ?1",
         )?;
         let mut rows = stmt.query([name])?;
         if let Some(row) = rows.next()? {
@@ -305,17 +322,12 @@ impl Database {
         sql.push_str(" WHERE id = ?");
         params.push(&exp_id);
 
-        self.conn.execute(&sql, rusqlite::params_from_iter(params.iter()))?;
+        self.conn
+            .execute(&sql, rusqlite::params_from_iter(params.iter()))?;
         Ok(())
     }
 
-    pub fn insert_metric(
-        &self,
-        exp_id: &str,
-        step: i64,
-        key: &str,
-        value: f64,
-    ) -> Result<()> {
+    pub fn insert_metric(&self, exp_id: &str, step: i64, key: &str, value: f64) -> Result<()> {
         let recorded_at = chrono::Local::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO metrics_history (exp_id, step, metric_key, metric_value, recorded_at)
@@ -323,7 +335,13 @@ impl Database {
              ON CONFLICT(exp_id, step, metric_key) DO UPDATE SET
                 metric_value = excluded.metric_value,
                 recorded_at = excluded.recorded_at",
-            [exp_id, &step.to_string(), key, &value.to_string(), &recorded_at],
+            [
+                exp_id,
+                &step.to_string(),
+                key,
+                &value.to_string(),
+                &recorded_at,
+            ],
         )?;
         Ok(())
     }
@@ -331,7 +349,7 @@ impl Database {
     pub fn get_metrics(&self, exp_id: &str) -> Result<Vec<MetricRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT exp_id, step, metric_key, metric_value, recorded_at
-             FROM metrics_history WHERE exp_id = ?1 ORDER BY step, metric_key"
+             FROM metrics_history WHERE exp_id = ?1 ORDER BY step, metric_key",
         )?;
         let rows = stmt.query_map([exp_id], |row| {
             Ok(MetricRecord {
@@ -439,9 +457,18 @@ mod tests {
     fn test_insert_and_get_experiment() {
         let db = create_test_db();
         db.insert_experiment(
-            "exp-001", "001", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-001",
+            "001",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         let exp = db.get_experiment("exp-001").unwrap().unwrap();
         assert_eq!(exp.id, "exp-001");
@@ -454,11 +481,27 @@ mod tests {
     fn test_update_experiment_status() {
         let db = create_test_db();
         db.insert_experiment(
-            "exp-002", "002", "created", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-002",
+            "002",
+            "created",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
-        db.update_experiment_status("exp-002", "running", Some("2026-01-01T01:00:00Z"), None, None).unwrap();
+        db.update_experiment_status(
+            "exp-002",
+            "running",
+            Some("2026-01-01T01:00:00Z"),
+            None,
+            None,
+        )
+        .unwrap();
 
         let exp = db.get_experiment("exp-002").unwrap().unwrap();
         assert_eq!(exp.status, "running");
@@ -469,9 +512,18 @@ mod tests {
     fn test_insert_and_get_metric() {
         let db = create_test_db();
         db.insert_experiment(
-            "exp-003", "003", "running", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-003",
+            "003",
+            "running",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         db.insert_metric("exp-003", 1, "loss", 0.5).unwrap();
         db.insert_metric("exp-003", 1, "loss", 0.3).unwrap();
@@ -484,7 +536,14 @@ mod tests {
     #[test]
     fn test_insert_and_get_dataset() {
         let db = create_test_db();
-        db.insert_dataset("imdb-v1", "./data/imdb", Some("abc123"), Some("IMDB dataset"), "2026-01-01T00:00:00Z").unwrap();
+        db.insert_dataset(
+            "imdb-v1",
+            "./data/imdb",
+            Some("abc123"),
+            Some("IMDB dataset"),
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
 
         let ds = db.get_dataset("imdb-v1").unwrap().unwrap();
         assert_eq!(ds.name, "imdb-v1");
@@ -496,13 +555,31 @@ mod tests {
     fn test_list_experiments_with_filter() {
         let db = create_test_db();
         db.insert_experiment(
-            "exp-004", "004", "finished", "2026-01-01T00:00:00Z",
-            None, None, "python train.py", None, None, None,
-        ).unwrap();
+            "exp-004",
+            "004",
+            "finished",
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            "python train.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         db.insert_experiment(
-            "exp-005", "005", "running", "2026-01-02T00:00:00Z",
-            None, None, "python eval.py", None, None, None,
-        ).unwrap();
+            "exp-005",
+            "005",
+            "running",
+            "2026-01-02T00:00:00Z",
+            None,
+            None,
+            "python eval.py",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         let running = db.list_experiments(Some("running"), None).unwrap();
         assert_eq!(running.len(), 1);
@@ -547,12 +624,15 @@ mod tests {
         let path = dir.path().join("test.db");
         let db = Database::open(&path).unwrap();
 
-        let journal_mode: String = db.conn.query_row(
-            "PRAGMA journal_mode",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let journal_mode: String = db
+            .conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
 
-        assert_eq!(journal_mode.to_lowercase(), "wal", "数据库应以 WAL 模式打开");
+        assert_eq!(
+            journal_mode.to_lowercase(),
+            "wal",
+            "数据库应以 WAL 模式打开"
+        );
     }
 }

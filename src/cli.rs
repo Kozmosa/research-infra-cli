@@ -100,7 +100,11 @@ pub enum DataCommands {
 #[derive(Subcommand)]
 pub enum ExpCommands {
     New {
-        #[arg(long, help = "已注册的数据资产名称", required_unless_present = "manual")]
+        #[arg(
+            long,
+            help = "已注册的数据资产名称",
+            required_unless_present = "manual"
+        )]
         data: Option<String>,
 
         #[arg(long, help = "要执行的 shell 命令", required_unless_present = "manual")]

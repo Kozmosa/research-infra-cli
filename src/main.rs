@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use rcli::cli::{Cli, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands, LogCommands, ProjectCommands};
+use rcli::cli::{
+    Cli, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands, LogCommands,
+    ProjectCommands,
+};
 use rcli::commands::{config, data, db, env, exp, log, project};
 use rcli::error::RcliError;
 use rcli::output;
@@ -35,7 +38,12 @@ fn get_repo(repo_override: Option<&str>) -> Result<Repository, RcliError> {
 
 fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), RcliError> {
     match cmd {
-        ProjectCommands::Init { path, name, force, exp_dir } => {
+        ProjectCommands::Init {
+            path,
+            name,
+            force,
+            exp_dir,
+        } => {
             let created = project::init(path.clone(), name.clone(), *force, exp_dir.clone())?;
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&created)?);
@@ -50,7 +58,11 @@ fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), RcliErro
     }
 }
 
-fn handle_env(cmd: &EnvCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_env(
+    cmd: &EnvCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         EnvCommands::Status => {
@@ -96,13 +108,25 @@ fn handle_env(cmd: &EnvCommands, repo_override: Option<&str>, json_mode: bool) -
     }
 }
 
-fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_data(
+    cmd: &DataCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        DataCommands::Register { path, name, desc, checksum } => {
+        DataCommands::Register {
+            path,
+            name,
+            desc,
+            checksum,
+        } => {
             data::register(&repo, path, name, desc.clone(), checksum.clone())?;
             if json_mode {
-                println!("{}", serde_json::json!({"name": name, "status": "registered"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"name": name, "status": "registered"})
+                );
             } else {
                 println!("数据资产 '{}' 已注册", name);
             }
@@ -138,9 +162,12 @@ fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool)
             }
             Ok(())
         }
-        DataCommands::Update { name, path, recompute_checksum } => {
-            data::update(&repo, name, path.clone(), *recompute_checksum
-            )?;
+        DataCommands::Update {
+            name,
+            path,
+            recompute_checksum,
+        } => {
+            data::update(&repo, name, path.clone(), *recompute_checksum)?;
             if json_mode {
                 println!("{}", serde_json::json!({"name": name, "status": "updated"}));
             } else {
@@ -151,10 +178,23 @@ fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool)
     }
 }
 
-fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_exp(
+    cmd: &ExpCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        ExpCommands::New { data, cmd: command, manual, label, params, notes, env: env_name, template } => {
+        ExpCommands::New {
+            data,
+            cmd: command,
+            manual,
+            label,
+            params,
+            notes,
+            env: env_name,
+            template,
+        } => {
             let (exp_id, exp_dir) = exp::new(
                 &repo,
                 data.clone(),
@@ -192,7 +232,10 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
         ExpCommands::Stop { exp_id, signal } => {
             exp::stop(&repo, exp_id, signal)?;
             if json_mode {
-                println!("{}", serde_json::json!({"exp_id": exp_id, "status": "stopped"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": "stopped"})
+                );
             } else {
                 println!("实验 {} 已终止", exp_id);
             }
@@ -218,7 +261,10 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
             } else {
                 println!("{:<30} {:<12} {:<20} 命令", "ID", "状态", "创建时间");
                 for e in &exps {
-                    println!("{:<30} {:<12} {:<20} {}", e.id, e.status, e.created_at, e.command);
+                    println!(
+                        "{:<30} {:<12} {:<20} {}",
+                        e.id, e.status, e.created_at, e.command
+                    );
                 }
             }
             Ok(())
@@ -232,28 +278,50 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
             }
             Ok(())
         }
-        ExpCommands::Metric { exp_id, step, metrics_json, keys, vals } => {
+        ExpCommands::Metric {
+            exp_id,
+            step,
+            metrics_json,
+            keys,
+            vals,
+        } => {
             exp::metric(&repo, exp_id, *step, metrics_json.as_deref(), keys, vals)?;
             if json_mode {
-                println!("{}", serde_json::json!({"exp_id": exp_id, "step": step, "status": "recorded"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "step": step, "status": "recorded"})
+                );
             } else {
                 println!("指标已记录到实验 {}", exp_id);
             }
             Ok(())
         }
-        ExpCommands::Param { exp_id, params_json } => {
+        ExpCommands::Param {
+            exp_id,
+            params_json,
+        } => {
             exp::param(&repo, exp_id, params_json)?;
             if json_mode {
-                println!("{}", serde_json::json!({"exp_id": exp_id, "status": "updated"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": "updated"})
+                );
             } else {
                 println!("参数已更新到实验 {}", exp_id);
             }
             Ok(())
         }
-        ExpCommands::Finish { exp_id, status, message } => {
+        ExpCommands::Finish {
+            exp_id,
+            status,
+            message,
+        } => {
             exp::finish(&repo, exp_id, status, message.as_deref())?;
             if json_mode {
-                println!("{}", serde_json::json!({"exp_id": exp_id, "status": status}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": status})
+                );
             } else {
                 println!("实验 {} 已标记为 {}", exp_id, status);
             }
@@ -262,7 +330,11 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
     }
 }
 
-fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_db(
+    cmd: &DbCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         DbCommands::Sync { mode } => {
@@ -286,7 +358,10 @@ fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> 
         DbCommands::Import { from } => {
             db::import_from(&repo, from)?;
             if json_mode {
-                println!("{}", serde_json::json!({"from": from, "status": "imported"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"from": from, "status": "imported"})
+                );
             } else {
                 println!("导入完成: {}", from);
             }
@@ -310,14 +385,25 @@ fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> 
     }
 }
 
-fn handle_log(cmd: &LogCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_log(
+    cmd: &LogCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        LogCommands::Show { exp_id, tail, follow } => {
+        LogCommands::Show {
+            exp_id,
+            tail,
+            follow,
+        } => {
             if json_mode && !follow {
                 let log_path = repo.exp_log_path(exp_id);
                 if !log_path.exists() {
-                    return Err(RcliError::Other(format!("实验 '{}' 的日志文件不存在", exp_id)));
+                    return Err(RcliError::Other(format!(
+                        "实验 '{}' 的日志文件不存在",
+                        exp_id
+                    )));
                 }
                 let content = std::fs::read_to_string(&log_path)?;
                 let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
@@ -328,7 +414,10 @@ fn handle_log(cmd: &LogCommands, repo_override: Option<&str>, json_mode: bool) -
                     }
                     None => lines,
                 };
-                println!("{}", serde_json::json!({"exp_id": exp_id, "lines": output_lines}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "lines": output_lines})
+                );
             } else {
                 log::show(&repo, exp_id, *tail, *follow)?;
             }
@@ -337,7 +426,11 @@ fn handle_log(cmd: &LogCommands, repo_override: Option<&str>, json_mode: bool) -
     }
 }
 
-fn handle_config(cmd: &ConfigCommands, repo_override: Option<&str>, json_mode: bool) -> Result<(), RcliError> {
+fn handle_config(
+    cmd: &ConfigCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), RcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         ConfigCommands::Get { key } => {
@@ -353,7 +446,10 @@ fn handle_config(cmd: &ConfigCommands, repo_override: Option<&str>, json_mode: b
         ConfigCommands::Set { key, value } => {
             config::set(&repo, key, value)?;
             if json_mode {
-                println!("{}", serde_json::json!({"key": key, "value": value, "status": "updated"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"key": key, "value": value, "status": "updated"})
+                );
             } else {
                 println!("配置已更新: {} = {}", key, value);
             }

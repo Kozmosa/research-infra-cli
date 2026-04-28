@@ -35,11 +35,14 @@ pub fn status(repo: &Repository) -> Result<EnvStatus> {
     let db = Database::open(&repo.db_path())?;
 
     let active = db.list_active_experiments()?;
-    let active_experiments: Vec<ActiveExp> = active.into_iter().map(|e| ActiveExp {
-        id: e.id,
-        status: e.status,
-        start_time: None,
-    }).collect();
+    let active_experiments: Vec<ActiveExp> = active
+        .into_iter()
+        .map(|e| ActiveExp {
+            id: e.id,
+            status: e.status,
+            start_time: None,
+        })
+        .collect();
 
     let data_index_path = repo.data_index_path();
     let data_assets = if data_index_path.exists() {
@@ -71,7 +74,7 @@ pub fn check(repo: &Repository, strict: bool) -> Result<()> {
         let hooks_dir = repo.research_dir().join("hooks");
         if !hooks_dir.exists() {
             return Err(RcliError::ReadinessCheckFailed(
-                ".research/hooks 目录不存在".to_string()
+                ".research/hooks 目录不存在".to_string(),
             ));
         }
 
@@ -83,7 +86,7 @@ pub fn check(repo: &Repository, strict: bool) -> Result<()> {
 
         if !has_any_hook {
             return Err(RcliError::ReadinessCheckFailed(
-                ".research/hooks 中没有任何 hook 文件".to_string()
+                ".research/hooks 中没有任何 hook 文件".to_string(),
             ));
         }
     }
@@ -152,19 +155,29 @@ mod tests {
         db.init_schema().unwrap();
 
         // Create .gitignore to ignore SQLite temp files and hooks (so removing hooks doesn't dirty git)
-        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n.research/hooks/\n").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n.research/hooks/\n",
+        )
+        .unwrap();
 
         // Commit all files so workspace is clean
         let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
-        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index
+            .add_all(["."], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = git_repo.find_tree(tree_id).unwrap();
-        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
+        git_repo
+            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
 
-        let repo = Repository { root: root.to_path_buf() };
+        let repo = Repository {
+            root: root.to_path_buf(),
+        };
         (repo, dir)
     }
 
