@@ -163,6 +163,9 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         .spawn()?;
 
     let child_id = child.id() as i32;
+    let pid_path = repo.exp_dir(exp_id).join("pid");
+    fs::write(&pid_path, child_id.to_string())?;
+
     let interrupted = Arc::new(AtomicBool::new(false));
     let interrupted_ctrlc = interrupted.clone();
 
@@ -222,6 +225,8 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     db.update_experiment_status(exp_id, new_status, None, Some(&finished_at), exit_code)?;
     update_exp_json_status(repo, exp_id, new_status, None, Some(&finished_at), exit_code)?;
 
+    let _ = fs::remove_file(&pid_path);
+
     Ok(exit_code.unwrap_or(-1))
 }
 
@@ -240,15 +245,25 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
         )));
     }
 
-    // TODO: Implement actual process stopping by tracking PIDs
-    // For now, just mark as interrupted
+    let pid_path = repo.exp_dir(exp_id).join("pid");
+    if pid_path.exists() {
+        let pid_str = fs::read_to_string(&pid_path)?;
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            let sig = match signal {
+                "SIGKILL" => libc::SIGKILL,
+                _ => libc::SIGTERM,
+            };
+            unsafe {
+                libc::kill(pid, sig);
+            }
+        }
+    }
+
     let finished_at = chrono::Local::now().to_rfc3339();
     db.update_experiment_status(exp_id, "interrupted", None, Some(&finished_at), None)?;
     update_exp_json_status(repo, exp_id, "interrupted", None, Some(&finished_at), None)?;
 
-    if !signal.is_empty() {
-        println!("发送 {} 信号到实验 {}", signal, exp_id);
-    }
+    let _ = fs::remove_file(&pid_path);
 
     Ok(())
 }

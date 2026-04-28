@@ -409,3 +409,98 @@ pub struct MetricRecord {
     pub metric_value: f64,
     pub recorded_at: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_db() -> Database {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let db = Database::open(&path).unwrap();
+        db.init_schema().unwrap();
+        db
+    }
+
+    #[test]
+    fn test_next_short_id_increments() {
+        let db = create_test_db();
+        let id1 = db.next_short_id().unwrap();
+        let id2 = db.next_short_id().unwrap();
+        assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn test_insert_and_get_experiment() {
+        let db = create_test_db();
+        db.insert_experiment(
+            "exp-001", "001", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        let exp = db.get_experiment("exp-001").unwrap().unwrap();
+        assert_eq!(exp.id, "exp-001");
+        assert_eq!(exp.short_id, "001");
+        assert_eq!(exp.status, "created");
+        assert_eq!(exp.command, "python train.py");
+    }
+
+    #[test]
+    fn test_update_experiment_status() {
+        let db = create_test_db();
+        db.insert_experiment(
+            "exp-002", "002", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        db.update_experiment_status("exp-002", "running", Some("2026-01-01T01:00:00Z"), None, None).unwrap();
+
+        let exp = db.get_experiment("exp-002").unwrap().unwrap();
+        assert_eq!(exp.status, "running");
+        assert_eq!(exp.started_at, Some("2026-01-01T01:00:00Z".to_string()));
+    }
+
+    #[test]
+    fn test_insert_and_get_metric() {
+        let db = create_test_db();
+        db.insert_experiment(
+            "exp-003", "003", "running", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        db.insert_metric("exp-003", 1, "loss", 0.5).unwrap();
+        db.insert_metric("exp-003", 1, "loss", 0.3).unwrap();
+
+        let metrics = db.get_metrics("exp-003").unwrap();
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].metric_value, 0.3);
+    }
+
+    #[test]
+    fn test_insert_and_get_dataset() {
+        let db = create_test_db();
+        db.insert_dataset("imdb-v1", "./data/imdb", Some("abc123"), Some("IMDB dataset"), "2026-01-01T00:00:00Z").unwrap();
+
+        let ds = db.get_dataset("imdb-v1").unwrap().unwrap();
+        assert_eq!(ds.name, "imdb-v1");
+        assert_eq!(ds.path, "./data/imdb");
+        assert_eq!(ds.checksum, Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_list_experiments_with_filter() {
+        let db = create_test_db();
+        db.insert_experiment(
+            "exp-004", "004", "finished", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+        db.insert_experiment(
+            "exp-005", "005", "running", "2026-01-02T00:00:00Z",
+            None, None, "python eval.py", None, None, None,
+        ).unwrap();
+
+        let running = db.list_experiments(Some("running"), None).unwrap();
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].id, "exp-005");
+    }
+}

@@ -4,6 +4,7 @@ use std::fmt;
 pub enum RcliError {
     WorkspaceNotClean,
     DataNotFound(String),
+    DataAlreadyExists(String),
     ExpIdExists(String),
     MissingRequiredArg(String),
     RepoNotFound,
@@ -24,6 +25,7 @@ impl fmt::Display for RcliError {
         match self {
             RcliError::WorkspaceNotClean => write!(f, "工作区不干净，请提交或暂存更改"),
             RcliError::DataNotFound(name) => write!(f, "数据资产 '{}' 未找到", name),
+            RcliError::DataAlreadyExists(name) => write!(f, "数据资产 '{}' 已存在", name),
             RcliError::ExpIdExists(id) => write!(f, "实验 ID '{}' 已存在", id),
             RcliError::MissingRequiredArg(arg) => write!(f, "缺少必需参数: {}", arg),
             RcliError::RepoNotFound => write!(f, "未找到研究仓库，请确认当前目录在仓库内"),
@@ -84,6 +86,7 @@ impl RcliError {
         match self {
             RcliError::WorkspaceNotClean => "WORKSPACE_NOT_CLEAN",
             RcliError::DataNotFound(_) => "DATA_NOT_FOUND",
+            RcliError::DataAlreadyExists(_) => "DATA_ALREADY_EXISTS",
             RcliError::ExpIdExists(_) => "EXP_ID_EXISTS",
             RcliError::MissingRequiredArg(_) => "MISSING_REQUIRED_ARG",
             RcliError::RepoNotFound => "REPO_NOT_FOUND",

@@ -45,7 +45,9 @@ pub fn register(repo: &Repository, path: &str, name: &str, desc: Option<String>,
     let index_path = repo.data_index_path();
     let mut datasets = load_data_index(&index_path)?;
 
-    datasets.retain(|d: &crate::db::Dataset| d.name != name);
+    if datasets.iter().any(|d| d.name == name) {
+        return Err(RcliError::DataAlreadyExists(name.to_string()));
+    }
     datasets.push(dataset);
 
     save_data_index(&index_path, &datasets)?;

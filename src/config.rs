@@ -18,10 +18,18 @@ pub struct Config {
     pub extra: HashMap<String, serde_yaml::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplatesConfig {
     #[serde(default = "default_templates_dir")]
     pub dir: String,
+}
+
+impl Default for TemplatesConfig {
+    fn default() -> Self {
+        TemplatesConfig {
+            dir: default_templates_dir(),
+        }
+    }
 }
 
 fn default_project_name() -> String {
@@ -100,5 +108,54 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.project_name, "research-project");
+        assert_eq!(config.experiments_dir, "experiments");
+        assert_eq!(config.templates.dir, "templates");
+    }
+
+    #[test]
+    fn test_config_get_set_nested() {
+        let mut config = Config::default();
+        config.set("templates.dir", "custom-templates").unwrap();
+        assert_eq!(config.get("templates.dir").unwrap(), "custom-templates");
+    }
+
+    #[test]
+    fn test_config_get_missing_key() {
+        let config = Config::default();
+        let result = config.get("nonexistent.key");
+        assert!(matches!(result, Err(RcliError::ConfigKeyNotFound(_))));
+    }
+
+    #[test]
+    fn test_config_save_and_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+
+        let mut config = Config::default();
+        config.project_name = "test-project".to_string();
+        config.set("custom_key", "custom_value").unwrap();
+        config.save(&path).unwrap();
+
+        let loaded = Config::load(&path).unwrap();
+        assert_eq!(loaded.project_name, "test-project");
+        assert_eq!(loaded.get("custom_key").unwrap(), "custom_value");
+    }
+
+    #[test]
+    fn test_config_load_nonexistent() {
+        let path = Path::new("/nonexistent/path/config.yaml");
+        let config = Config::load(path).unwrap();
+        assert_eq!(config.project_name, "research-project");
     }
 }
