@@ -218,6 +218,8 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         ("interrupted", None)
     } else if exit_status.success() {
         ("finished", Some(0))
+    } else if exit_status.code().is_none() {
+        ("interrupted", None)
     } else {
         ("failed", exit_status.code())
     };
@@ -246,17 +248,29 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
     }
 
     let pid_path = repo.exp_dir(exp_id).join("pid");
-    if pid_path.exists() {
-        let pid_str = fs::read_to_string(&pid_path)?;
-        if let Ok(pid) = pid_str.trim().parse::<i32>() {
-            let sig = match signal {
-                "SIGKILL" => libc::SIGKILL,
-                _ => libc::SIGTERM,
-            };
-            unsafe {
-                libc::kill(pid, sig);
-            }
-        }
+    if !pid_path.exists() {
+        return Err(RcliError::Other(format!(
+            "实验 '{}' 的 PID 文件不存在，无法终止", exp_id
+        )));
+    }
+
+    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid = pid_str.trim().parse::<i32>()
+        .map_err(|_| RcliError::Other(format!(
+            "实验 '{}' 的 PID 文件内容无效: '{}'", exp_id, pid_str.trim()
+        )))?;
+
+    let sig = match signal {
+        "SIGKILL" => libc::SIGKILL,
+        _ => libc::SIGTERM,
+    };
+
+    let ret = unsafe { libc::kill(pid, sig) };
+    if ret != 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(RcliError::Other(format!(
+            "向实验 '{}' 的进程 {} 发送信号失败: {}", exp_id, pid, err
+        )));
     }
 
     let finished_at = chrono::Local::now().to_rfc3339();
@@ -570,7 +584,7 @@ mod tests {
     #[test]
     fn test_run_pid_file_exists_during_execution() {
         let (repo, _dir) = create_test_repo();
-        create_test_experiment(&repo, "exp-003", "sleep 0.5"
+        create_test_experiment(&repo, "exp-003", "sleep 2"
         );
 
         let pid_path = repo.exp_dir("exp-003").join("pid");
@@ -581,11 +595,56 @@ mod tests {
             ).unwrap();
         });
 
-        thread::sleep(Duration::from_millis(100));
-        assert!(pid_path.exists());
+        let mut found = false;
+        for _ in 0..50 {
+            if pid_path.exists() {
+                found = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(found, "PID 文件应在实验运行期间出现");
 
         run_handle.join().unwrap();
         assert!(!pid_path.exists());
+    }
+
+    #[test]
+    fn test_run_stop_end_to_end() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-008", "sleep 10"
+        );
+
+        let pid_path = repo.exp_dir("exp-008").join("pid");
+        let repo_run = Repository { root: repo.root.clone() };
+        let repo_stop = Repository { root: repo.root.clone() };
+
+        let run_handle = thread::spawn(move || {
+            run(&repo_run, "exp-008", &[]
+            ).unwrap();
+        });
+
+        let mut found = false;
+        for _ in 0..50 {
+            if pid_path.exists() {
+                found = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(found, "PID 文件应在 run 启动后出现");
+
+        stop(&repo_stop, "exp-008", "SIGTERM"
+        ).unwrap();
+
+        run_handle.join().unwrap();
+
+        assert!(!pid_path.exists());
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-008").unwrap().unwrap();
+        assert_eq!(exp.status, "interrupted");
+        assert!(exp.finished_at.is_some());
     }
 
     #[test]
