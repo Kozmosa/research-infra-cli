@@ -147,3 +147,88 @@ fn compute_dir_checksum(path: &Path) -> Result<String> {
     let result = format!("{:x}", hasher.finalize());
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::db::Database;
+    use crate::repo::Repository;
+
+    fn create_test_repo() -> (Repository, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("data/raw")).unwrap();
+
+        let config = Config::default();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        (Repository { root: root.to_path_buf() }, dir)
+    }
+
+    #[test]
+    fn test_register_new_dataset() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+
+        register(&repo, "data/raw", "test-data", Some("desc".to_string()), None
+        ).unwrap();
+
+        let datasets = list(&repo).unwrap();
+        assert_eq!(datasets.len(), 1);
+        assert_eq!(datasets[0].name, "test-data");
+        assert_eq!(datasets[0].path, "data/raw");
+        assert_eq!(datasets[0].description, Some("desc".to_string()));
+    }
+
+    #[test]
+    fn test_register_duplicate_fails() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+
+        register(&repo, "data/raw", "test-data", None, None
+        ).unwrap();
+
+        let result = register(&repo, "data/raw", "test-data", Some("new desc".to_string()), None
+        );
+        assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
+
+        let datasets = list(&repo).unwrap();
+        assert_eq!(datasets.len(), 1);
+        assert_eq!(datasets[0].description, None);
+    }
+
+    #[test]
+    fn test_info_and_update() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+
+        register(&repo, "data/raw", "test-data", Some("original".to_string()), None
+        ).unwrap();
+
+        let ds = info(&repo, "test-data").unwrap();
+        assert_eq!(ds.name, "test-data");
+
+        update(&repo, "test-data", Some("data/new".to_string()), false
+        ).unwrap();
+
+        let ds = info(&repo, "test-data").unwrap();
+        assert_eq!(ds.path, "data/new");
+    }
+
+    #[test]
+    fn test_update_nonexistent_fails() {
+        let (repo, _dir) = create_test_repo();
+        let result = update(&repo, "missing", Some("data/new".to_string()), false
+        );
+        assert!(matches!(result, Err(RcliError::DataNotFound(_))));
+    }
+}

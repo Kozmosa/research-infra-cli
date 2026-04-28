@@ -477,3 +477,198 @@ fn update_exp_json_status(
     fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command as StdCommand, Stdio};
+    use std::thread;
+    use std::time::Duration;
+
+    fn create_test_repo() -> (Repository, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("experiments")).unwrap();
+
+        let config = crate::config::Config::default();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        (Repository { root: root.to_path_buf() }, dir)
+    }
+
+    fn create_test_experiment(repo: &Repository, exp_id: &str, command: &str) {
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            exp_id, "001", "created", "2026-01-01T00:00:00Z",
+            None, None, command, None, None, None,
+        ).unwrap();
+
+        let exp_dir = repo.exp_dir(exp_id);
+        fs::create_dir_all(&exp_dir).unwrap();
+        fs::create_dir_all(exp_dir.join("logs")).unwrap();
+        fs::create_dir_all(exp_dir.join("artifacts")).unwrap();
+
+        let json = serde_json::json!({
+            "id": exp_id,
+            "short_id": "001",
+            "status": "created",
+            "created_at": "2026-01-01T00:00:00Z",
+            "command": command,
+        });
+        fs::write(
+            exp_dir.join("experiment.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_run_creates_and_cleans_pid_file() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-001", "echo hello"
+        );
+
+        let pid_path = repo.exp_dir("exp-001").join("pid");
+
+        assert!(!pid_path.exists());
+
+        run(&repo, "exp-001", &[]
+        ).unwrap();
+
+        assert!(!pid_path.exists());
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-001").unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+        assert_eq!(exp.exit_code, Some(0));
+    }
+
+    #[test]
+    fn test_run_failure_cleans_pid_file() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-002", "exit 42"
+        );
+
+        let pid_path = repo.exp_dir("exp-002").join("pid");
+
+        let code = run(&repo, "exp-002", &[]
+        ).unwrap();
+        assert_eq!(code, 42);
+
+        assert!(!pid_path.exists());
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-002").unwrap().unwrap();
+        assert_eq!(exp.status, "failed");
+        assert_eq!(exp.exit_code, Some(42));
+    }
+
+    #[test]
+    fn test_run_pid_file_exists_during_execution() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-003", "sleep 0.5"
+        );
+
+        let pid_path = repo.exp_dir("exp-003").join("pid");
+        let repo_clone = Repository { root: repo.root.clone() };
+
+        let run_handle = thread::spawn(move || {
+            run(&repo_clone, "exp-003", &[]
+            ).unwrap();
+        });
+
+        thread::sleep(Duration::from_millis(100));
+        assert!(pid_path.exists());
+
+        run_handle.join().unwrap();
+        assert!(!pid_path.exists());
+    }
+
+    #[test]
+    fn test_stop_non_running_fails() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-004", "echo hello"
+        );
+
+        let result = stop(&repo, "exp-004", "SIGTERM"
+        );
+        assert!(matches!(result, Err(RcliError::Other(_))));
+    }
+
+    #[test]
+    fn test_stop_sends_signal_and_updates_status() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-005", "sleep 10"
+        );
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.update_experiment_status("exp-005", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+
+        let mut child = StdCommand::new("sleep")
+            .arg("10")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as i32;
+
+        fs::write(repo.exp_dir("exp-005").join("pid"), pid.to_string()).unwrap();
+
+        stop(&repo, "exp-005", "SIGTERM"
+        ).unwrap();
+
+        thread::sleep(Duration::from_millis(200));
+        let status = child.try_wait().unwrap();
+        assert!(status.is_some(), "子进程应已被信号终止");
+
+        let exp = db.get_experiment("exp-005").unwrap().unwrap();
+        assert_eq!(exp.status, "interrupted");
+        assert!(!repo.exp_dir("exp-005").join("pid").exists());
+    }
+
+    #[test]
+    fn test_status_and_list() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-006", "echo hello"
+        );
+
+        let val = status(&repo, Some("exp-006")
+        ).unwrap();
+        assert_eq!(val.get("id").unwrap().as_str().unwrap(), "exp-006");
+
+        let exps = list(&repo, None, None
+        ).unwrap();
+        assert_eq!(exps.len(), 1);
+        assert_eq!(exps[0].id, "exp-006");
+    }
+
+    #[test]
+    fn test_metric_and_param_and_finish() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-007", "echo hello"
+        );
+
+        metric(&repo, "exp-007", 1, Some("{\"loss\":0.5}"), &[], &[]
+        ).unwrap();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let metrics = db.get_metrics("exp-007").unwrap();
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].metric_value, 0.5);
+
+        param(&repo, "exp-007", "{\"lr\":0.001}"
+        ).unwrap();
+        let exp = db.get_experiment("exp-007").unwrap().unwrap();
+        assert!(exp.params.as_ref().unwrap().contains("lr"));
+
+        finish(&repo, "exp-007", "finished", None
+        ).unwrap();
+        let exp = db.get_experiment("exp-007").unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+        assert!(exp.finished_at.is_some());
+    }
+}
