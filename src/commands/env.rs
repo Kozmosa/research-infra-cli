@@ -67,6 +67,25 @@ pub fn check(repo: &Repository, strict: bool) -> Result<()> {
         if !git_info.is_clean {
             return Err(RcliError::WorkspaceNotClean);
         }
+
+        let hooks_dir = repo.research_dir().join("hooks");
+        if !hooks_dir.exists() {
+            return Err(RcliError::ReadinessCheckFailed(
+                ".research/hooks 目录不存在".to_string()
+            ));
+        }
+
+        // Check for at least one readiness marker or hook file
+        let has_any_hook = std::fs::read_dir(&hooks_dir)?.any(|e| {
+            e.map(|entry| entry.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+                .unwrap_or(false)
+        });
+
+        if !has_any_hook {
+            return Err(RcliError::ReadinessCheckFailed(
+                ".research/hooks 中没有任何 hook 文件".to_string()
+            ));
+        }
     }
     Ok(())
 }
@@ -121,6 +140,8 @@ mod tests {
         let _ = git2::Repository::init(&root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join(".research/hooks")).unwrap();
+        fs::write(root.join(".research/hooks/pre-experiment"), "#!/bin/sh\n").unwrap();
         fs::create_dir_all(root.join("data/raw")).unwrap();
         fs::create_dir_all(root.join("experiments")).unwrap();
 
@@ -130,8 +151,8 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        // Create .gitignore to ignore SQLite temp files
-        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n").unwrap();
+        // Create .gitignore to ignore SQLite temp files and hooks (so removing hooks doesn't dirty git)
+        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n.research/hooks/\n").unwrap();
 
         // Commit all files so workspace is clean
         let git_repo = git2::Repository::open(&root).unwrap();
@@ -151,7 +172,7 @@ mod tests {
     fn test_check_strict_requires_clean_workspace() {
         let (repo, _dir) = create_test_repo();
 
-        // Clean workspace should pass
+        // Clean workspace with hooks should pass
         check(&repo, true).unwrap();
 
         // Dirty workspace should fail
@@ -166,6 +187,34 @@ mod tests {
 
         fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
         check(&repo, false).unwrap();
+    }
+
+    #[test]
+    fn test_check_strict_requires_hooks_dir() {
+        let (repo, _dir) = create_test_repo();
+
+        // Remove hooks directory
+        fs::remove_dir_all(repo.research_dir().join("hooks")).unwrap();
+
+        let result = check(&repo, true);
+        assert!(matches!(result, Err(RcliError::ReadinessCheckFailed(_))));
+    }
+
+    #[test]
+    fn test_check_strict_requires_at_least_one_hook_file() {
+        let (repo, _dir) = create_test_repo();
+
+        // Empty hooks directory
+        let hooks_dir = repo.research_dir().join("hooks");
+        for entry in fs::read_dir(&hooks_dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                fs::remove_file(entry.path()).unwrap();
+            }
+        }
+
+        let result = check(&repo, true);
+        assert!(matches!(result, Err(RcliError::ReadinessCheckFailed(_))));
     }
 
     #[test]

@@ -215,7 +215,13 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
 
     let finished_at = chrono::Local::now().to_rfc3339();
 
-    let (new_status, exit_code) = if interrupted.load(Ordering::SeqCst) {
+    let stop_intent_path = repo.exp_dir(exp_id).join(".stop");
+    let stop_intent_present = stop_intent_path.exists();
+    if stop_intent_present {
+        let _ = fs::remove_file(&stop_intent_path);
+    }
+
+    let (new_status, exit_code) = if interrupted.load(Ordering::SeqCst) || stop_intent_present {
         ("interrupted", None)
     } else if exit_status.success() {
         ("finished", Some(0))
@@ -278,6 +284,10 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
             "向实验 '{}' 的进程 {} 发送信号失败: {}", exp_id, pid, err
         )));
     }
+
+    // Write stop-intent so run() converges to "interrupted" regardless of child exit code
+    let stop_intent_path = repo.exp_dir(exp_id).join(".stop");
+    fs::write(&stop_intent_path, "")?;
 
     Ok(())
 }
@@ -524,6 +534,8 @@ mod tests {
         let _ = git2::Repository::init(&root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join(".research/hooks")).unwrap();
+        fs::write(root.join(".research/hooks/pre-experiment"), "#!/bin/sh\n").unwrap();
         fs::create_dir_all(root.join("experiments")).unwrap();
 
         let config = crate::config::Config::default();
@@ -602,6 +614,8 @@ mod tests {
         let _ = git2::Repository::init(&root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join(".research/hooks")).unwrap();
+        fs::write(root.join(".research/hooks/pre-experiment"), "#!/bin/sh\n").unwrap();
         fs::create_dir_all(root.join("exps")).unwrap();
 
         let mut config = crate::config::Config::default();
@@ -611,7 +625,7 @@ mod tests {
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
 
-        fs::write(root.join(".gitignore"), ".research/*.db*\n").unwrap();
+        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/hooks/\n").unwrap();
         let git_repo = git2::Repository::open(&root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
@@ -668,7 +682,7 @@ mod tests {
         let db = Database::open(&repo.db_path()).unwrap();
         let exp = db.get_experiment(&exp_id).unwrap().unwrap();
         assert_eq!(exp.status, "created");
-        assert_eq!(exp.data_used.as_deref(), Some(""));
+        assert_eq!(exp.data_used, None);
     }
 
     #[test]
@@ -862,10 +876,16 @@ mod tests {
         let status = child.try_wait().unwrap();
         assert!(status.is_some(), "子进程应已被信号终止");
 
+        // stop() writes stop-intent so run() will converge to "interrupted"
+        assert!(repo.exp_dir("exp-005").join(".stop").exists(), "stop() 应写入 .stop 意图文件");
+
         // stop() 不再修改 DB 状态或删除 PID 文件，这些由 run() 负责
         let exp = db.get_experiment("exp-005").unwrap().unwrap();
         assert_eq!(exp.status, "running");
         assert!(repo.exp_dir("exp-005").join("pid").exists());
+
+        // cleanup
+        let _ = fs::remove_file(repo.exp_dir("exp-005").join(".stop"));
     }
 
     #[test]
@@ -922,7 +942,8 @@ mod tests {
         stop(&repo, "exp-010", "SIGTERM"
         ).unwrap();
 
-        // stop() 不应修改 DB 状态或删除 PID 文件——这些由 run() 在子进程实际退出后处理
+        // stop() 应写入 .stop 意图文件，但不修改 DB 状态或删除 PID 文件
+        assert!(repo.exp_dir("exp-010").join(".stop").exists(), "stop() 应写入 .stop 意图文件");
         let exp = db.get_experiment("exp-010").unwrap().unwrap();
         assert_eq!(exp.status, "running", "stop() 不应修改实验状态");
         assert!(repo.exp_dir("exp-010").join("pid").exists(), "stop() 不应删除 PID 文件");
@@ -934,6 +955,7 @@ mod tests {
             unsafe { libc::kill(pid, libc::SIGKILL); }
             let _ = child.wait();
         }
+        let _ = fs::remove_file(repo.exp_dir("exp-010").join(".stop"));
     }
 
     #[test]

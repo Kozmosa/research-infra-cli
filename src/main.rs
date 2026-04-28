@@ -231,7 +231,9 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
         }
         ExpCommands::Export { exp_id, output } => {
             let path = exp::export(&repo, exp_id, output.as_deref())?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"exp_id": exp_id, "path": path}));
+            } else {
                 println!("实验已导出到: {}", path);
             }
             Ok(())
@@ -305,6 +307,9 @@ fn handle_db(cmd: &DbCommands, repo_override: Option<&str>, json_mode: bool) -> 
                 println!("需要导入: {:?}", status.need_import);
                 println!("已同步: {:?}", status.in_sync);
                 println!("不在数据库中: {:?}", status.not_in_db);
+                if !status.conflicts.is_empty() {
+                    println!("冲突: {:?}", status.conflicts);
+                }
             }
             Ok(())
         }
@@ -353,7 +358,9 @@ fn handle_config(cmd: &ConfigCommands, repo_override: Option<&str>, json_mode: b
         }
         ConfigCommands::Set { key, value } => {
             config::set(&repo, key, value)?;
-            if !json_mode {
+            if json_mode {
+                println!("{}", serde_json::json!({"key": key, "value": value, "status": "updated"}));
+            } else {
                 println!("配置已更新: {} = {}", key, value);
             }
             Ok(())

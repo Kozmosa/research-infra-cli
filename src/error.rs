@@ -3,6 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum RcliError {
     WorkspaceNotClean,
+    ReadinessCheckFailed(String),
     DataNotFound(String),
     DataAlreadyExists(String),
     ExpIdExists(String),
@@ -24,6 +25,7 @@ impl fmt::Display for RcliError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RcliError::WorkspaceNotClean => write!(f, "工作区不干净，请提交或暂存更改"),
+            RcliError::ReadinessCheckFailed(msg) => write!(f, "环境就绪检查失败: {}", msg),
             RcliError::DataNotFound(name) => write!(f, "数据资产 '{}' 未找到", name),
             RcliError::DataAlreadyExists(name) => write!(f, "数据资产 '{}' 已存在", name),
             RcliError::ExpIdExists(id) => write!(f, "实验 ID '{}' 已存在", id),
@@ -85,6 +87,7 @@ impl RcliError {
     pub fn error_code(&self) -> &'static str {
         match self {
             RcliError::WorkspaceNotClean => "WORKSPACE_NOT_CLEAN",
+            RcliError::ReadinessCheckFailed(_) => "READINESS_CHECK_FAILED",
             RcliError::DataNotFound(_) => "DATA_NOT_FOUND",
             RcliError::DataAlreadyExists(_) => "DATA_ALREADY_EXISTS",
             RcliError::ExpIdExists(_) => "EXP_ID_EXISTS",
@@ -114,6 +117,7 @@ mod tests {
     fn test_error_codes_are_consistent() {
         let errors = vec![
             (RcliError::WorkspaceNotClean, "WORKSPACE_NOT_CLEAN"),
+            (RcliError::ReadinessCheckFailed("hooks missing".to_string()), "READINESS_CHECK_FAILED"),
             (RcliError::DataNotFound("x".to_string()), "DATA_NOT_FOUND"),
             (RcliError::DataAlreadyExists("x".to_string()), "DATA_ALREADY_EXISTS"),
             (RcliError::ExpIdExists("x".to_string()), "EXP_ID_EXISTS"),

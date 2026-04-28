@@ -65,6 +65,7 @@ pub fn status(repo: &Repository) -> Result<SyncStatus> {
     let mut need_import = Vec::new();
     let mut in_sync = Vec::new();
     let mut not_in_db = Vec::new();
+    let mut conflicts = Vec::new();
 
     for exp_summary in &db_exps {
         let json_path = repo.exp_json_path(&exp_summary.id);
@@ -92,8 +93,10 @@ pub fn status(repo: &Repository) -> Result<SyncStatus> {
 
                 if db_time > json_time {
                     need_export.push(exp_summary.id.clone());
-                } else {
+                } else if json_time > db_time {
                     need_import.push(exp_summary.id.clone());
+                } else {
+                    conflicts.push(exp_summary.id.clone());
                 }
             }
         }
@@ -118,6 +121,7 @@ pub fn status(repo: &Repository) -> Result<SyncStatus> {
         need_import,
         in_sync,
         not_in_db,
+        conflicts,
     })
 }
 
@@ -127,6 +131,7 @@ pub struct SyncStatus {
     pub need_import: Vec<String>,
     pub in_sync: Vec<String>,
     pub not_in_db: Vec<String>,
+    pub conflicts: Vec<String>,
 }
 
 fn sync_export(repo: &Repository) -> Result<()> {
@@ -208,6 +213,21 @@ fn sync_auto(repo: &Repository) -> Result<()> {
                 let json_str = serde_json::to_string(&json_exp)?;
                 if db_str != json_str {
                     conflicts.push(exp.id.clone());
+                }
+            }
+        }
+    }
+
+    // Scan for JSON-only experiments and import them
+    let exp_dir = repo.experiments_dir();
+    if exp_dir.exists() {
+        for entry in fs::read_dir(&exp_dir)? {
+            let entry = entry?;
+            let json_path = entry.path().join("experiment.json");
+            if json_path.exists() {
+                let id = entry.file_name().to_string_lossy().to_string();
+                if db.get_experiment(&id)?.is_none() {
+                    import_single_file(&db, &json_path)?;
                 }
             }
         }
@@ -417,6 +437,60 @@ mod tests {
         sync_import(&repo).unwrap();
         let exp = db2.get_experiment("exp-006").unwrap().unwrap();
         assert_eq!(exp.params, Some(r#"{"epochs":10,"lr":0.01}"#.to_string()));
+    }
+
+    #[test]
+    fn test_sync_status_detects_conflict() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-007", "007", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        // Create JSON with same created_at/updated_at but different content
+        let exp_dir = repo.exp_dir("exp-007");
+        fs::create_dir_all(&exp_dir).unwrap();
+        let json = serde_json::json!({
+            "id": "exp-007",
+            "short_id": "007",
+            "status": "finished",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "command": "python eval.py",
+        });
+        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        let sync_status = status(&repo).unwrap();
+        assert_eq!(sync_status.conflicts.len(), 1);
+        assert_eq!(sync_status.conflicts[0], "exp-007");
+        assert_eq!(sync_status.need_export.len(), 0);
+        assert_eq!(sync_status.need_import.len(), 0);
+    }
+
+    #[test]
+    fn test_sync_auto_imports_json_only_experiments() {
+        let (repo, _dir) = create_test_repo();
+
+        // Create a JSON-only experiment (not in DB)
+        let exp_dir = repo.exp_dir("exp-008");
+        fs::create_dir_all(&exp_dir).unwrap();
+        let json = serde_json::json!({
+            "id": "exp-008",
+            "short_id": "008",
+            "status": "finished",
+            "created_at": "2026-01-02T00:00:00Z",
+            "command": "python eval.py",
+        });
+        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        sync_auto(&repo).unwrap();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-008").unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+        assert_eq!(exp.command, "python eval.py");
     }
 }
 
