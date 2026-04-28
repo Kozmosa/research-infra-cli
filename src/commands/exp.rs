@@ -187,12 +187,10 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         use std::io::{BufRead, BufReader, Write};
         let mut log = std::io::BufWriter::new(log_file);
         let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                println!("{}", l);
-                let _ = writeln!(log, "[stdout] {}", l);
-                let _ = log.flush();
-            }
+        for l in reader.lines().flatten() {
+            println!("{}", l);
+            let _ = writeln!(log, "[stdout] {}", l);
+            let _ = log.flush();
         }
     });
 
@@ -200,12 +198,10 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         use std::io::{BufRead, BufReader, Write};
         let mut log = std::io::BufWriter::new(log_file2);
         let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                eprintln!("{}", l);
-                let _ = writeln!(log, "[stderr] {}", l);
-                let _ = log.flush();
-            }
+        for l in reader.lines().flatten() {
+            eprintln!("{}", l);
+            let _ = writeln!(log, "[stderr] {}", l);
+            let _ = log.flush();
         }
     });
 
@@ -375,11 +371,10 @@ pub fn metric(
 
     if !keys.is_empty() {
         for (i, key) in keys.iter().enumerate() {
-            if let Some(val_str) = vals.get(i) {
-                if let Ok(val) = val_str.parse::<f64>() {
+            if let Some(val_str) = vals.get(i)
+                && let Ok(val) = val_str.parse::<f64>() {
                     metrics.push((key.clone(), val));
                 }
-            }
         }
     }
 
@@ -531,7 +526,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        let _ = git2::Repository::init(&root);
+        let _ = git2::Repository::init(root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
         fs::create_dir_all(root.join(".research/hooks")).unwrap();
@@ -548,7 +543,7 @@ mod tests {
         fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n").unwrap();
 
         // Commit all files so workspace is clean for env::check
-        let git_repo = git2::Repository::open(&root).unwrap();
+        let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
         index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
@@ -611,7 +606,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        let _ = git2::Repository::init(&root);
+        let _ = git2::Repository::init(root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
         fs::create_dir_all(root.join(".research/hooks")).unwrap();
@@ -626,7 +621,7 @@ mod tests {
         db.init_schema().unwrap();
 
         fs::write(root.join(".gitignore"), ".research/*.db*\n.research/hooks/\n").unwrap();
-        let git_repo = git2::Repository::open(&root).unwrap();
+        let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
         index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();

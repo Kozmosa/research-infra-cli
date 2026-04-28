@@ -12,7 +12,7 @@ impl Repository {
     pub fn discover(start_dir: Option<&Path>) -> Result<Self> {
         let start = match start_dir {
             Some(p) => p.to_path_buf(),
-            None => env::current_dir().map_err(|e| RcliError::Io(e))?,
+            None => env::current_dir().map_err(RcliError::Io)?,
         };
 
         let mut current = start.as_path();

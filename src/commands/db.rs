@@ -281,6 +281,42 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    map.insert("id".to_string(), serde_json::Value::String(exp.id.clone()));
+    map.insert("short_id".to_string(), serde_json::Value::String(exp.short_id.clone()));
+    map.insert("status".to_string(), serde_json::Value::String(exp.status.clone()));
+    map.insert("created_at".to_string(), serde_json::Value::String(exp.created_at.clone()));
+    map.insert("updated_at".to_string(), serde_json::Value::String(exp.updated_at.clone()));
+    if let Some(ref sa) = exp.started_at {
+        map.insert("started_at".to_string(), serde_json::Value::String(sa.clone()));
+    }
+    if let Some(ref fa) = exp.finished_at {
+        map.insert("finished_at".to_string(), serde_json::Value::String(fa.clone()));
+    }
+    if let Some(ref ch) = exp.commit_hash {
+        map.insert("commit_hash".to_string(), serde_json::Value::String(ch.clone()));
+    }
+    if let Some(ref du) = exp.data_used {
+        map.insert("data_used".to_string(), serde_json::Value::String(du.clone()));
+    }
+    map.insert("command".to_string(), serde_json::Value::String(exp.command.clone()));
+    if let Some(ref p) = exp.params {
+        let parsed: serde_json::Value = serde_json::from_str(p).unwrap_or(serde_json::Value::String(p.clone()));
+        map.insert("params".to_string(), parsed);
+    }
+    if let Some(ref n) = exp.notes {
+        map.insert("notes".to_string(), serde_json::Value::String(n.clone()));
+    }
+    if let Some(ref e) = exp.env {
+        map.insert("env".to_string(), serde_json::Value::String(e.clone()));
+    }
+    if let Some(ref ec) = exp.exit_code {
+        map.insert("exit_code".to_string(), serde_json::Value::Number((*ec).into()));
+    }
+    Ok(serde_json::Value::Object(map))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,40 +528,4 @@ mod tests {
         assert_eq!(exp.status, "finished");
         assert_eq!(exp.command, "python eval.py");
     }
-}
-
-pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {
-    let mut map = serde_json::Map::new();
-    map.insert("id".to_string(), serde_json::Value::String(exp.id.clone()));
-    map.insert("short_id".to_string(), serde_json::Value::String(exp.short_id.clone()));
-    map.insert("status".to_string(), serde_json::Value::String(exp.status.clone()));
-    map.insert("created_at".to_string(), serde_json::Value::String(exp.created_at.clone()));
-    map.insert("updated_at".to_string(), serde_json::Value::String(exp.updated_at.clone()));
-    if let Some(ref sa) = exp.started_at {
-        map.insert("started_at".to_string(), serde_json::Value::String(sa.clone()));
-    }
-    if let Some(ref fa) = exp.finished_at {
-        map.insert("finished_at".to_string(), serde_json::Value::String(fa.clone()));
-    }
-    if let Some(ref ch) = exp.commit_hash {
-        map.insert("commit_hash".to_string(), serde_json::Value::String(ch.clone()));
-    }
-    if let Some(ref du) = exp.data_used {
-        map.insert("data_used".to_string(), serde_json::Value::String(du.clone()));
-    }
-    map.insert("command".to_string(), serde_json::Value::String(exp.command.clone()));
-    if let Some(ref p) = exp.params {
-        let parsed: serde_json::Value = serde_json::from_str(p).unwrap_or(serde_json::Value::String(p.clone()));
-        map.insert("params".to_string(), parsed);
-    }
-    if let Some(ref n) = exp.notes {
-        map.insert("notes".to_string(), serde_json::Value::String(n.clone()));
-    }
-    if let Some(ref e) = exp.env {
-        map.insert("env".to_string(), serde_json::Value::String(e.clone()));
-    }
-    if let Some(ref ec) = exp.exit_code {
-        map.insert("exit_code".to_string(), serde_json::Value::Number((*ec).into()));
-    }
-    Ok(serde_json::Value::Object(map))
 }

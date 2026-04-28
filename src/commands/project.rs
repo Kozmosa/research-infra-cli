@@ -68,8 +68,7 @@ pub fn init(
 
     let gitignore = target.join(".gitignore");
     if !gitignore.exists() {
-        let content = format!(
-            "# rcli 内部数据\n\
+        let content = "# rcli 内部数据\n\
              .research/*.db*\n\
              .research/*.db-journal\n\
              .research/*.db-wal\n\
@@ -85,8 +84,7 @@ pub fn init(
              Cargo.lock\n\
              \n\
              # 大数据建议使用 DVC 管理\n\
-             # data/raw/large-datasets/\n"
-        );
+             # data/raw/large-datasets/\n".to_string();
         fs::write(&gitignore, content)?;
         created.push(gitignore.to_string_lossy().to_string());
     }

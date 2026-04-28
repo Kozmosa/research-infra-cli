@@ -112,13 +112,11 @@ fn handle_data(cmd: &DataCommands, repo_override: Option<&str>, json_mode: bool)
             let datasets = data::list(&repo)?;
             if json_mode {
                 output::print_json(&datasets);
+            } else if datasets.is_empty() {
+                println!("无已注册的数据资产");
             } else {
-                if datasets.is_empty() {
-                    println!("无已注册的数据资产");
-                } else {
-                    for ds in &datasets {
-                        println!("{}", ds.name);
-                    }
+                for ds in &datasets {
+                    println!("{}", ds.name);
                 }
             }
             Ok(())
@@ -204,11 +202,9 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
             let status = exp::status(&repo, exp_id.as_deref())?;
             if json_mode {
                 output::print_json(&status);
-            } else {
-                if let Some(obj) = status.as_object() {
-                    for (k, v) in obj {
-                        println!("{}: {}", k, v);
-                    }
+            } else if let Some(obj) = status.as_object() {
+                for (k, v) in obj {
+                    println!("{}: {}", k, v);
                 }
             }
             Ok(())
@@ -217,14 +213,12 @@ fn handle_exp(cmd: &ExpCommands, repo_override: Option<&str>, json_mode: bool) -
             let exps = exp::list(&repo, status.as_deref(), since.as_deref())?;
             if json_mode {
                 output::print_json(&exps);
+            } else if exps.is_empty() {
+                println!("无实验记录");
             } else {
-                if exps.is_empty() {
-                    println!("无实验记录");
-                } else {
-                    println!("{:<30} {:<12} {:<20} {}", "ID", "状态", "创建时间", "命令");
-                    for e in &exps {
-                        println!("{:<30} {:<12} {:<20} {}", e.id, e.status, e.created_at, e.command);
-                    }
+                println!("{:<30} {:<12} {:<20} 命令", "ID", "状态", "创建时间");
+                for e in &exps {
+                    println!("{:<30} {:<12} {:<20} {}", e.id, e.status, e.created_at, e.command);
                 }
             }
             Ok(())

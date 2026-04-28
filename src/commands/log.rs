@@ -34,10 +34,8 @@ fn show_inner(
             writeln!(writer, "{}", line)?;
         }
     } else {
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                writeln!(writer, "{}", l)?;
-            }
+        for l in reader.lines().flatten() {
+            writeln!(writer, "{}", l)?;
         }
     }
 
@@ -45,21 +43,18 @@ fn show_inner(
         let mut pos = fs::metadata(&log_path)?.len();
         loop {
             thread::sleep(Duration::from_millis(500));
-            if let Some(stop) = stop_signal {
-                if stop.load(Ordering::Relaxed) {
+            if let Some(stop) = stop_signal
+                && stop.load(Ordering::Relaxed) {
                     break;
                 }
-            }
             let metadata = fs::metadata(&log_path)?;
             let len = metadata.len();
             if len > pos {
                 let file = fs::File::open(&log_path)?;
                 let mut new_reader = std::io::BufReader::new(file);
                 new_reader.seek(SeekFrom::Start(pos))?;
-                for line in new_reader.lines() {
-                    if let Ok(l) = line {
-                        writeln!(writer, "{}", l)?;
-                    }
+                for l in new_reader.lines().flatten() {
+                    writeln!(writer, "{}", l)?;
                 }
                 pos = len;
             }

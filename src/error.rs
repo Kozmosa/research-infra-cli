@@ -126,7 +126,7 @@ mod tests {
             (RcliError::InvalidStatus("x".to_string()), "INVALID_STATUS"),
             (RcliError::ConfigKeyNotFound("x".to_string()), "CONFIG_KEY_NOT_FOUND"),
             (RcliError::SyncConflict(vec!["x".to_string()]), "SYNC_CONFLICT"),
-            (RcliError::Io(std::io::Error::new(std::io::ErrorKind::Other, "x")), "IO_ERROR"),
+            (RcliError::Io(std::io::Error::other("x")), "IO_ERROR"),
             (RcliError::Sqlite(rusqlite::Error::InvalidQuery), "SQLITE_ERROR"),
             (RcliError::Other("x".to_string()), "UNKNOWN_ERROR"),
         ];

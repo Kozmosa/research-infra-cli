@@ -137,7 +137,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        let _ = git2::Repository::init(&root);
+        let _ = git2::Repository::init(root);
 
         fs::create_dir_all(root.join(".research")).unwrap();
         fs::create_dir_all(root.join(".research/hooks")).unwrap();
@@ -155,7 +155,7 @@ mod tests {
         fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n.research/hooks/\n").unwrap();
 
         // Commit all files so workspace is clean
-        let git_repo = git2::Repository::open(&root).unwrap();
+        let git_repo = git2::Repository::open(root).unwrap();
         let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
         let mut index = git_repo.index().unwrap();
         index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();

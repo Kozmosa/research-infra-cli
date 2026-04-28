@@ -142,8 +142,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.yaml");
 
-        let mut config = Config::default();
-        config.project_name = "test-project".to_string();
+        let mut config = Config {
+            project_name: "test-project".to_string(),
+            ..Default::default()
+        };
         config.set("custom_key", "custom_value").unwrap();
         config.save(&path).unwrap();
 
