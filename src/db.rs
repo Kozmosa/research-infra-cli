@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::error::Result;
 
 pub struct Database {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Database {
@@ -534,5 +534,20 @@ mod tests {
         for i in 1..ids.len() {
             assert_eq!(ids[i], ids[i - 1] + 1, "并发 short_id 应连续无重复");
         }
+    }
+
+    #[test]
+    fn test_database_opens_in_wal_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let db = Database::open(&path).unwrap();
+
+        let journal_mode: String = db.conn.query_row(
+            "PRAGMA journal_mode",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(journal_mode.to_lowercase(), "wal", "数据库应以 WAL 模式打开");
     }
 }

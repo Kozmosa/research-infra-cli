@@ -342,6 +342,32 @@ mod tests {
         assert_eq!(sync_status.in_sync.len(), 1);
         assert_eq!(sync_status.in_sync[0], "exp-004");
     }
+
+    #[test]
+    fn test_sync_auto_detects_conflict() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-005", "005", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        // 创建与 DB 内容不同的 JSON 文件（相同 created_at，不同内容）
+        let exp_dir = repo.exp_dir("exp-005");
+        fs::create_dir_all(&exp_dir).unwrap();
+        let json = serde_json::json!({
+            "id": "exp-005",
+            "short_id": "005",
+            "status": "finished",
+            "created_at": "2026-01-01T00:00:00Z",
+            "command": "python eval.py",
+        });
+        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        let result = sync_auto(&repo);
+        assert!(matches!(result, Err(RcliError::SyncConflict(_))));
+    }
 }
 
 pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {

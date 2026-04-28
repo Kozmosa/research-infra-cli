@@ -598,6 +598,68 @@ mod tests {
     }
 
     #[test]
+    fn test_new_manual_mode_bypasses_data_requirement() {
+        let (repo, _dir) = create_test_repo();
+
+        let (exp_id, _) = new(
+            &repo, None, None, true,
+            None, None, None, None, None,
+        ).unwrap();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment(&exp_id).unwrap().unwrap();
+        assert_eq!(exp.status, "created");
+        assert_eq!(exp.data_used.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn test_new_fails_on_dirty_workspace() {
+        let (repo, _dir) = create_test_repo();
+
+        // 创建工作区脏文件
+        fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
+
+        let result = new(
+            &repo, None, Some("echo hello".to_string()), true,
+            None, None, None, None, None,
+        );
+        assert!(matches!(result, Err(RcliError::WorkspaceNotClean)));
+    }
+
+    #[test]
+    fn test_new_generates_unique_ids() {
+        let (repo, _dir) = create_test_repo();
+
+        let (id1, _) = new(
+            &repo, None, Some("echo 1".to_string()), true,
+            None, None, None, None, None,
+        ).unwrap();
+
+        // 提交实验文件以保持工作区干净
+        let git_repo = git2::Repository::open(&repo.root).unwrap();
+        let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
+        let mut index = git_repo.index().unwrap();
+        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = git_repo.find_tree(tree_id).unwrap();
+        let parent = git_repo.head().unwrap().peel_to_commit().unwrap();
+        git_repo.commit(Some("HEAD"), &sig, &sig, "exp1", &tree, &[&parent]).unwrap();
+
+        let (id2, _) = new(
+            &repo, None, Some("echo 2".to_string()), true,
+            None, None, None, None, None,
+        ).unwrap();
+
+        assert_ne!(id1, id2, "两次 new 调用应生成不同的实验 ID");
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp1 = db.get_experiment(&id1).unwrap().unwrap();
+        let exp2 = db.get_experiment(&id2).unwrap().unwrap();
+        assert_ne!(exp1.short_id, exp2.short_id, "short_id 应唯一");
+    }
+
+    #[test]
     fn test_run_creates_and_cleans_pid_file() {
         let (repo, _dir) = create_test_repo();
         create_test_experiment(&repo, "exp-001", "echo hello"

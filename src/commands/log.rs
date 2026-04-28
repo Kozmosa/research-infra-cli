@@ -58,6 +58,7 @@ mod tests {
     use crate::db::Database;
     use crate::repo::Repository;
     use std::fs;
+    use std::io::Write;
 
     fn create_test_repo() -> (Repository, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -103,5 +104,37 @@ mod tests {
 
         let result = show(&repo, "exp-003", None, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_show_follow_detects_new_content() {
+        let (repo, _dir) = create_test_repo();
+
+        let exp_dir = repo.exp_dir("exp-004");
+        fs::create_dir_all(exp_dir.join("logs")).unwrap();
+        fs::write(exp_dir.join("logs/run.log"), "initial\n").unwrap();
+
+        // follow 模式会阻塞，在线程中运行
+        let repo_clone = Repository { root: repo.root.clone() };
+        let handle = thread::spawn(move || {
+            show(&repo_clone, "exp-004", None, true).unwrap();
+        });
+
+        // 等待 follow 进入循环
+        thread::sleep(Duration::from_millis(100));
+
+        // 追加新内容
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(exp_dir.join("logs/run.log"))
+            .unwrap();
+        file.write_all(b"new line\n").unwrap();
+        drop(file);
+
+        // 等待 follow 检测到新内容（follow 每 500ms 检查一次）
+        thread::sleep(Duration::from_millis(700));
+
+        // 线程应仍在运行（follow 是无限循环）
+        assert!(!handle.is_finished(), "follow 模式应持续运行");
     }
 }

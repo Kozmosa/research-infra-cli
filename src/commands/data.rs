@@ -231,4 +231,22 @@ mod tests {
         );
         assert!(matches!(result, Err(RcliError::DataNotFound(_))));
     }
+
+    #[test]
+    fn test_list_returns_all_datasets() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("a.txt"), "a").unwrap();
+        fs::write(data_path.join("b.txt"), "b").unwrap();
+
+        register(&repo, "data/raw", "dataset-a", Some("desc-a".to_string()), None
+        ).unwrap();
+        register(&repo, "data/raw", "dataset-b", Some("desc-b".to_string()), None
+        ).unwrap();
+
+        let datasets = list(&repo).unwrap();
+        assert_eq!(datasets.len(), 2);
+        assert!(datasets.iter().any(|d| d.name == "dataset-a"));
+        assert!(datasets.iter().any(|d| d.name == "dataset-b"));
+    }
 }
