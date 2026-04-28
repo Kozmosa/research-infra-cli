@@ -151,9 +151,18 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
+    #[cfg(unix)]
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    #[cfg(unix)]
     let mut child = Command::new(&shell)
         .arg("-c")
+        .arg(&command)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    #[cfg(windows)]
+    let mut child = Command::new("cmd")
+        .arg("/C")
         .arg(&command)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -172,8 +181,15 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
 
     ctrlc::set_handler(move || {
         interrupted_ctrlc.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
         unsafe {
             libc::kill(child_id, libc::SIGTERM);
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &child_id.to_string(), "/T", "/F"])
+                .output();
         }
     })
     .ok();
@@ -275,24 +291,41 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
         ))
     })?;
 
-    let sig = match signal {
-        "SIGTERM" => libc::SIGTERM,
-        "SIGKILL" => libc::SIGKILL,
-        _ => {
-            return Err(RcliError::InvalidStatus(format!(
-                "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL",
-                signal
+    #[cfg(unix)]
+    {
+        let sig = match signal {
+            "SIGTERM" => libc::SIGTERM,
+            "SIGKILL" => libc::SIGKILL,
+            _ => {
+                return Err(RcliError::InvalidStatus(format!(
+                    "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL",
+                    signal
+                )));
+            }
+        };
+
+        let ret = unsafe { libc::kill(pid, sig) };
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            return Err(RcliError::Other(format!(
+                "向实验 '{}' 的进程 {} 发送信号失败: {}",
+                exp_id, pid, err
             )));
         }
-    };
-
-    let ret = unsafe { libc::kill(pid, sig) };
-    if ret != 0 {
-        let err = std::io::Error::last_os_error();
-        return Err(RcliError::Other(format!(
-            "向实验 '{}' 的进程 {} 发送信号失败: {}",
-            exp_id, pid, err
-        )));
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .output()
+            .map_err(|e| RcliError::Other(format!("终止进程失败: {}", e)))?;
+        if !output.status.success() {
+            let msg = String::from_utf8_lossy(&output.stderr);
+            return Err(RcliError::Other(format!(
+                "向实验 '{}' 的进程 {} 发送终止信号失败: {}",
+                exp_id, pid, msg
+            )));
+        }
     }
 
     // Write stop-intent so run() converges to "interrupted" regardless of child exit code
