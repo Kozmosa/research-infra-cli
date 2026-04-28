@@ -106,3 +106,76 @@ fn get_git_info(repo: &Repository) -> Result<GitInfo> {
         last_commit_time,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+    use crate::repo::Repository;
+    use std::fs;
+
+    fn create_test_repo() -> (Repository, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let _ = git2::Repository::init(&root);
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("data/raw")).unwrap();
+        fs::create_dir_all(root.join("experiments")).unwrap();
+
+        let config = crate::config::Config::default();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        // Create .gitignore to ignore SQLite temp files
+        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n").unwrap();
+
+        // Commit all files so workspace is clean
+        let git_repo = git2::Repository::open(&root).unwrap();
+        let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
+        let mut index = git_repo.index().unwrap();
+        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = git_repo.find_tree(tree_id).unwrap();
+        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
+
+        let repo = Repository { root: root.to_path_buf() };
+        (repo, dir)
+    }
+
+    #[test]
+    fn test_check_strict_requires_clean_workspace() {
+        let (repo, _dir) = create_test_repo();
+
+        // Clean workspace should pass
+        check(&repo, true).unwrap();
+
+        // Dirty workspace should fail
+        fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
+        let result = check(&repo, true);
+        assert!(matches!(result, Err(RcliError::WorkspaceNotClean)));
+    }
+
+    #[test]
+    fn test_check_non_strict_allows_dirty() {
+        let (repo, _dir) = create_test_repo();
+
+        fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
+        check(&repo, false).unwrap();
+    }
+
+    #[test]
+    fn test_status_returns_repo_info() {
+        let (repo, _dir) = create_test_repo();
+
+        let status = status(&repo).unwrap();
+        assert!(status.repo_root.contains(".tmp"));
+        assert_eq!(status.active_experiments.len(), 0);
+        assert_eq!(status.data_assets.len(), 0);
+        assert_eq!(status.config.project_name, "research-project");
+    }
+}

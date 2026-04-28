@@ -261,8 +261,13 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
         )))?;
 
     let sig = match signal {
+        "SIGTERM" => libc::SIGTERM,
         "SIGKILL" => libc::SIGKILL,
-        _ => libc::SIGTERM,
+        _ => {
+            return Err(RcliError::InvalidStatus(format!(
+                "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL", signal
+            )));
+        }
     };
 
     let ret = unsafe { libc::kill(pid, sig) };
@@ -272,12 +277,6 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
             "向实验 '{}' 的进程 {} 发送信号失败: {}", exp_id, pid, err
         )));
     }
-
-    let finished_at = chrono::Local::now().to_rfc3339();
-    db.update_experiment_status(exp_id, "interrupted", None, Some(&finished_at), None)?;
-    update_exp_json_status(repo, exp_id, "interrupted", None, Some(&finished_at), None)?;
-
-    let _ = fs::remove_file(&pid_path);
 
     Ok(())
 }
@@ -503,6 +502,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
+        let _ = git2::Repository::init(&root);
+
         fs::create_dir_all(root.join(".research")).unwrap();
         fs::create_dir_all(root.join("experiments")).unwrap();
 
@@ -511,6 +512,19 @@ mod tests {
 
         let db = Database::open(&root.join(".research/research.db")).unwrap();
         db.init_schema().unwrap();
+
+        // Create .gitignore to ignore SQLite temp files
+        fs::write(root.join(".gitignore"), ".research/*.db*\n.research/*.db-wal\n.research/*.db-shm\n").unwrap();
+
+        // Commit all files so workspace is clean for env::check
+        let git_repo = git2::Repository::open(&root).unwrap();
+        let sig = git2::Signature::new("test", "test@test.com", &git2::Time::new(0, 0)).unwrap();
+        let mut index = git_repo.index().unwrap();
+        index.add_all(["."], git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = git_repo.find_tree(tree_id).unwrap();
+        git_repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
 
         (Repository { root: root.to_path_buf() }, dir)
     }
@@ -538,6 +552,49 @@ mod tests {
             exp_dir.join("experiment.json"),
             serde_json::to_string_pretty(&json).unwrap(),
         ).unwrap();
+    }
+
+    #[test]
+    fn test_new_creates_experiment() {
+        let (repo, _dir) = create_test_repo();
+
+        let (exp_id, exp_dir) = new(
+            &repo, None, Some("echo hello".to_string()), true,
+            None, None, None, None, None,
+        ).unwrap();
+
+        assert!(exp_dir.contains(&repo.root.to_string_lossy().to_string()));
+        assert!(repo.exp_dir(&exp_id).exists());
+        assert!(repo.exp_dir(&exp_id).join("artifacts").exists());
+        assert!(repo.exp_dir(&exp_id).join("logs").exists());
+        assert!(repo.exp_json_path(&exp_id).exists());
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment(&exp_id).unwrap().unwrap();
+        assert_eq!(exp.status, "created");
+        assert_eq!(exp.command, "echo hello");
+    }
+
+    #[test]
+    fn test_new_requires_data_and_cmd() {
+        let (repo, _dir) = create_test_repo();
+
+        let result = new(
+            &repo, None, None, false,
+            None, None, None, None, None,
+        );
+        assert!(matches!(result, Err(RcliError::MissingRequiredArg(_))));
+    }
+
+    #[test]
+    fn test_new_validates_data_asset() {
+        let (repo, _dir) = create_test_repo();
+
+        let result = new(
+            &repo, Some("nonexistent".to_string()), Some("echo hello".to_string()), false,
+            None, None, None, None, None,
+        );
+        assert!(matches!(result, Err(RcliError::DataNotFound(_))));
     }
 
     #[test]
@@ -659,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stop_sends_signal_and_updates_status() {
+    fn test_stop_sends_signal() {
         let (repo, _dir) = create_test_repo();
         create_test_experiment(&repo, "exp-005", "sleep 10"
         );
@@ -684,9 +741,78 @@ mod tests {
         let status = child.try_wait().unwrap();
         assert!(status.is_some(), "子进程应已被信号终止");
 
+        // stop() 不再修改 DB 状态或删除 PID 文件，这些由 run() 负责
         let exp = db.get_experiment("exp-005").unwrap().unwrap();
-        assert_eq!(exp.status, "interrupted");
-        assert!(!repo.exp_dir("exp-005").join("pid").exists());
+        assert_eq!(exp.status, "running");
+        assert!(repo.exp_dir("exp-005").join("pid").exists());
+    }
+
+    #[test]
+    fn test_stop_invalid_signal_fails() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-009", "sleep 10"
+        );
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.update_experiment_status("exp-009", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+
+        let mut child = StdCommand::new("sleep")
+            .arg("10")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as i32;
+        fs::write(repo.exp_dir("exp-009").join("pid"), pid.to_string()).unwrap();
+
+        let result = stop(&repo, "exp-009", "SIGINT"
+        );
+        assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
+
+        let result = stop(&repo, "exp-009", "INVALID"
+        );
+        assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
+
+        // 清理子进程
+        unsafe { libc::kill(pid, libc::SIGKILL); }
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn test_stop_does_not_prematurely_finalize_state() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-010", "sleep 10"
+        );
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.update_experiment_status("exp-010", "running", Some("2026-01-01T00:00:00Z"), None, None).unwrap();
+
+        let mut child = StdCommand::new("sleep")
+            .arg("10")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id() as i32;
+
+        fs::write(repo.exp_dir("exp-010").join("pid"), pid.to_string()).unwrap();
+
+        // 发送 SIGTERM，stop() 应返回成功（信号已投递）
+        stop(&repo, "exp-010", "SIGTERM"
+        ).unwrap();
+
+        // stop() 不应修改 DB 状态或删除 PID 文件——这些由 run() 在子进程实际退出后处理
+        let exp = db.get_experiment("exp-010").unwrap().unwrap();
+        assert_eq!(exp.status, "running", "stop() 不应修改实验状态");
+        assert!(repo.exp_dir("exp-010").join("pid").exists(), "stop() 不应删除 PID 文件");
+
+        // 清理：等待子进程被信号终止后清理
+        thread::sleep(Duration::from_millis(300));
+        let _ = child.try_wait();
+        if child.try_wait().unwrap().is_none() {
+            unsafe { libc::kill(pid, libc::SIGKILL); }
+            let _ = child.wait();
+        }
     }
 
     #[test]

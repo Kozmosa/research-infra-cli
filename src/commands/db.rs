@@ -243,6 +243,107 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+    use crate::repo::Repository;
+    use std::fs;
+
+    fn create_test_repo() -> (Repository, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("experiments")).unwrap();
+
+        let config = crate::config::Config::default();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        (Repository { root: root.to_path_buf() }, dir)
+    }
+
+    #[test]
+    fn test_sync_export_creates_json() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-001", "001", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        sync_export(&repo).unwrap();
+
+        let json_path = repo.exp_json_path("exp-001");
+        assert!(json_path.exists());
+
+        let content = fs::read_to_string(&json_path).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(json.get("id").unwrap().as_str().unwrap(), "exp-001");
+    }
+
+    #[test]
+    fn test_sync_import_from_json() {
+        let (repo, _dir) = create_test_repo();
+
+        let exp_dir = repo.exp_dir("exp-002");
+        fs::create_dir_all(&exp_dir).unwrap();
+
+        let json = serde_json::json!({
+            "id": "exp-002",
+            "short_id": "002",
+            "status": "finished",
+            "created_at": "2026-01-02T00:00:00Z",
+            "command": "python eval.py",
+        });
+        fs::write(exp_dir.join("experiment.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        sync_import(&repo).unwrap();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-002").unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+        assert_eq!(exp.command, "python eval.py");
+    }
+
+    #[test]
+    fn test_sync_status_detects_need_export() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-003", "003", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        let sync_status = status(&repo).unwrap();
+        assert_eq!(sync_status.need_export.len(), 1);
+        assert_eq!(sync_status.need_export[0], "exp-003");
+        assert_eq!(sync_status.in_sync.len(), 0);
+    }
+
+    #[test]
+    fn test_sync_status_detects_in_sync() {
+        let (repo, _dir) = create_test_repo();
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        db.insert_experiment(
+            "exp-004", "004", "created", "2026-01-01T00:00:00Z",
+            None, None, "python train.py", None, None, None,
+        ).unwrap();
+
+        sync_export(&repo).unwrap();
+
+        let sync_status = status(&repo).unwrap();
+        assert_eq!(sync_status.in_sync.len(), 1);
+        assert_eq!(sync_status.in_sync[0], "exp-004");
+    }
+}
+
 pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Value> {
     let mut map = serde_json::Map::new();
     map.insert("id".to_string(), serde_json::Value::String(exp.id.clone()));

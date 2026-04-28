@@ -503,4 +503,36 @@ mod tests {
         assert_eq!(running.len(), 1);
         assert_eq!(running[0].id, "exp-005");
     }
+
+    #[test]
+    fn test_concurrent_short_id_generation() {
+        use std::thread;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+
+        // 先初始化 schema
+        let db = Database::open(&path).unwrap();
+        db.init_schema().unwrap();
+        drop(db);
+
+        let mut handles = Vec::new();
+        for _ in 0..10 {
+            let path_clone = path.clone();
+            let handle = thread::spawn(move || {
+                let db = Database::open(&path_clone).unwrap();
+                db.next_short_id().unwrap()
+            });
+            handles.push(handle);
+        }
+
+        let mut ids: Vec<i64> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        ids.sort();
+
+        // 所有 ID 唯一且连续
+        assert_eq!(ids.len(), 10);
+        for i in 1..ids.len() {
+            assert_eq!(ids[i], ids[i - 1] + 1, "并发 short_id 应连续无重复");
+        }
+    }
 }

@@ -51,3 +51,57 @@ pub fn show(repo: &Repository, exp_id: &str, tail: Option<usize>, follow: bool) 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+    use crate::repo::Repository;
+    use std::fs;
+
+    fn create_test_repo() -> (Repository, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        fs::create_dir_all(root.join(".research")).unwrap();
+        fs::create_dir_all(root.join("experiments")).unwrap();
+
+        let config = crate::config::Config::default();
+        config.save(&root.join(".research/config.yaml")).unwrap();
+
+        let db = Database::open(&root.join(".research/research.db")).unwrap();
+        db.init_schema().unwrap();
+
+        (Repository { root: root.to_path_buf() }, dir)
+    }
+
+    #[test]
+    fn test_show_reads_log_file() {
+        let (repo, _dir) = create_test_repo();
+
+        let exp_dir = repo.exp_dir("exp-001");
+        fs::create_dir_all(exp_dir.join("logs")).unwrap();
+        fs::write(exp_dir.join("logs/run.log"), "line1\nline2\nline3\n").unwrap();
+
+        show(&repo, "exp-001", None, false).unwrap();
+    }
+
+    #[test]
+    fn test_show_tail_limits_lines() {
+        let (repo, _dir) = create_test_repo();
+
+        let exp_dir = repo.exp_dir("exp-002");
+        fs::create_dir_all(exp_dir.join("logs")).unwrap();
+        fs::write(exp_dir.join("logs/run.log"), "a\nb\nc\nd\ne\n").unwrap();
+
+        show(&repo, "exp-002", Some(2), false).unwrap();
+    }
+
+    #[test]
+    fn test_show_missing_log_fails() {
+        let (repo, _dir) = create_test_repo();
+
+        let result = show(&repo, "exp-003", None, false);
+        assert!(result.is_err());
+    }
+}

@@ -129,3 +129,96 @@ pub fn init(
 
     Ok(created)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_creates_scaffold() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("new-project");
+
+        let _created = init(
+            Some(target.to_string_lossy().to_string()),
+            Some("my-project".to_string()),
+            false,
+            "experiments".to_string(),
+        ).unwrap();
+
+        assert!(target.join("data/raw").exists());
+        assert!(target.join("data/processed").exists());
+        assert!(target.join("experiments").exists());
+        assert!(target.join("src").exists());
+        assert!(target.join("tests").exists());
+        assert!(target.join("artifacts").exists());
+        assert!(target.join("docs").exists());
+        assert!(target.join(".research").exists());
+        assert!(target.join(".research/templates").exists());
+        assert!(target.join(".research/hooks").exists());
+
+        assert!(target.join(".gitignore").exists());
+        assert!(target.join("README.md").exists());
+        assert!(target.join(".research/config.yaml").exists());
+        assert!(target.join(".research/research.db").exists());
+        assert!(target.join(".git").exists());
+
+        let config = Config::load(&target.join(".research/config.yaml")).unwrap();
+        assert_eq!(config.project_name, "my-project");
+        assert_eq!(config.experiments_dir, "experiments");
+    }
+
+    #[test]
+    fn test_init_rejects_nonempty_without_force() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("existing");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("somefile.txt"), "hello").unwrap();
+
+        let result = init(
+            Some(target.to_string_lossy().to_string()),
+            None,
+            false,
+            "experiments".to_string(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_init_force_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("existing");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("somefile.txt"), "hello").unwrap();
+
+        let _created = init(
+            Some(target.to_string_lossy().to_string()),
+            None,
+            true,
+            "experiments".to_string(),
+        ).unwrap();
+
+        assert!(target.join(".research/config.yaml").exists());
+    }
+
+    #[test]
+    fn test_init_rejects_duplicate() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("dup");
+
+        init(
+            Some(target.to_string_lossy().to_string()),
+            None,
+            false,
+            "experiments".to_string(),
+        ).unwrap();
+
+        let result = init(
+            Some(target.to_string_lossy().to_string()),
+            None,
+            false,
+            "experiments".to_string(),
+        );
+        assert!(result.is_err());
+    }
+}
