@@ -80,6 +80,63 @@ pub fn info(repo: &Repository, name: &str) -> Result<crate::db::Dataset> {
         .ok_or_else(|| ArcliError::DataNotFound(name.to_string()))
 }
 
+fn get_dataset_status(repo: &Repository, ds: &crate::db::Dataset) -> Result<String> {
+    let abs_path = if Path::new(&ds.path).is_relative() {
+        repo.root.join(&ds.path)
+    } else {
+        Path::new(&ds.path).to_path_buf()
+    };
+
+    if !abs_path.exists() {
+        Ok("missing".to_string())
+    } else {
+        let current_checksum = compute_dir_checksum(&abs_path)?;
+        match &ds.checksum {
+            Some(registered) if registered == &current_checksum => Ok("ok".to_string()),
+            Some(_) => Ok("changed".to_string()),
+            None => Ok("unknown".to_string()),
+        }
+    }
+}
+
+pub fn dataset_status(repo: &Repository, name: &str) -> Result<String> {
+    let datasets = load_data_index(&repo.data_index_path())?;
+    let ds = datasets
+        .into_iter()
+        .find(|d| d.name == name)
+        .ok_or_else(|| ArcliError::DataNotFound(name.to_string()))?;
+    get_dataset_status(repo, &ds)
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct VerifyResult {
+    pub name: String,
+    pub path: String,
+    pub status: String,
+    pub registered_at: String,
+}
+
+pub fn verify(repo: &Repository, changed_only: bool) -> Result<Vec<VerifyResult>> {
+    let datasets = load_data_index(&repo.data_index_path())?;
+    let mut results = Vec::new();
+
+    for ds in datasets {
+        let status = get_dataset_status(repo, &ds)?;
+        if changed_only && status == "ok" {
+            continue;
+        }
+
+        results.push(VerifyResult {
+            name: ds.name,
+            path: ds.path,
+            status,
+            registered_at: ds.registered_at,
+        });
+    }
+
+    Ok(results)
+}
+
 pub fn update(
     repo: &Repository,
     name: &str,
@@ -330,5 +387,36 @@ mod tests {
         assert_eq!(datasets.len(), 2);
         assert!(datasets.iter().any(|d| d.name == "dataset-a"));
         assert!(datasets.iter().any(|d| d.name == "dataset-b"));
+    }
+
+    #[test]
+    fn test_data_verify_detects_changes() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+
+        register(&repo, "data/raw", "test-data", None, None).unwrap();
+
+        // Initially OK
+        let results = verify(&repo, false).unwrap();
+        assert_eq!(results[0].status, "ok");
+
+        // Change file
+        fs::write(data_path.join("test.txt"), "changed").unwrap();
+
+        let results = verify(&repo, false).unwrap();
+        assert_eq!(results[0].status, "changed");
+    }
+
+    #[test]
+    fn test_data_list_no_checksum_overhead() {
+        let (repo, _dir) = create_test_repo();
+        let data_path = repo.root.join("data/raw");
+        fs::write(data_path.join("test.txt"), "hello").unwrap();
+        register(&repo, "data/raw", "test-data", None, None).unwrap();
+
+        // list() should NOT compute checksums
+        let datasets = list(&repo).unwrap();
+        assert_eq!(datasets.len(), 1);
     }
 }

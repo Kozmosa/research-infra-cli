@@ -8,9 +8,6 @@ pub struct Cli {
     #[arg(long, env = "RESEARCH_REPO", help = "指定仓库根目录")]
     pub repo: Option<String>,
 
-    #[arg(long, help = "以 JSON 格式输出")]
-    pub json: bool,
-
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -58,6 +55,9 @@ pub enum TechStack {
 #[derive(Subcommand)]
 pub enum ProjectCommands {
     Init {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "目标目录，默认当前目录")]
         path: Option<String>,
 
@@ -83,8 +83,14 @@ pub enum ProjectCommands {
 
 #[derive(Subcommand)]
 pub enum EnvCommands {
-    Status,
+    Status {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+    },
     Check {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(long, help = "严格检查工作区是否干净")]
         strict: bool,
     },
@@ -93,6 +99,9 @@ pub enum EnvCommands {
 #[derive(Subcommand)]
 pub enum DataCommands {
     Register {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "数据目录的路径（相对于仓库根）")]
         path: String,
 
@@ -105,12 +114,21 @@ pub enum DataCommands {
         #[arg(long, help = "手动提供 SHA256 校验和")]
         checksum: Option<String>,
     },
-    List,
+    List {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+    },
     Info {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "资产名称")]
         name: String,
     },
     Update {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "资产名称")]
         name: String,
 
@@ -120,11 +138,21 @@ pub enum DataCommands {
         #[arg(long, help = "重新计算校验和")]
         recompute_checksum: bool,
     },
+    Verify {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(long, help = "仅显示变更的资产")]
+        changed_only: bool,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum ExpCommands {
     New {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(
             long,
             help = "已注册的数据资产名称",
@@ -154,13 +182,22 @@ pub enum ExpCommands {
         template: Option<String>,
     },
     Run {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
+
+        #[arg(long, help = "超时时间（秒），超时后终止并标记 interrupted")]
+        timeout: Option<u64>,
 
         #[arg(trailing_var_arg = true, help = "追加到命令的额外参数")]
         args: Vec<String>,
     },
     Stop {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -168,10 +205,16 @@ pub enum ExpCommands {
         signal: String,
     },
     Status {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: Option<String>,
     },
     Metric {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -188,6 +231,9 @@ pub enum ExpCommands {
         vals: Vec<String>,
     },
     Param {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -195,6 +241,9 @@ pub enum ExpCommands {
         params_json: String,
     },
     Finish {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -205,6 +254,9 @@ pub enum ExpCommands {
         message: Option<String>,
     },
     Export {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -212,34 +264,87 @@ pub enum ExpCommands {
         output: Option<String>,
     },
     List {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(long, help = "按状态过滤")]
         status: Option<String>,
 
         #[arg(long, help = "按日期过滤")]
         since: Option<String>,
     },
+    Import {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "要导入的目录路径")]
+        path: String,
+
+        #[arg(long, help = "实验标签（必需）")]
+        label: String,
+
+        #[arg(long, help = "原始实验命令（必需）")]
+        cmd: String,
+
+        #[arg(long, help = "关联的数据资产名称")]
+        data: Option<String>,
+
+        #[arg(long, help = "移动目录而非复制")]
+        move_dir: bool,
+
+        #[arg(long, help = "跳过确认提示")]
+        yes: bool,
+    },
+    Diff {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "实验 ID 1")]
+        exp_id_1: String,
+
+        #[arg(help = "实验 ID 2")]
+        exp_id_2: String,
+
+        #[arg(long, help = "显示完整 diff 内容")]
+        full: bool,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum DbCommands {
     Sync {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(long, default_value = "auto", help = "同步模式")]
         mode: String,
     },
     ExportAll {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(long, help = "输出目录")]
         out_dir: Option<String>,
     },
     Import {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(long, help = "来源路径")]
         from: String,
     },
-    Status,
+    Status {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum LogCommands {
     Show {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "实验 ID")]
         exp_id: String,
 
@@ -254,10 +359,16 @@ pub enum LogCommands {
 #[derive(Subcommand)]
 pub enum ConfigCommands {
     Get {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "配置键")]
         key: String,
     },
     Set {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
         #[arg(help = "配置键")]
         key: String,
 

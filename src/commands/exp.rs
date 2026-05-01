@@ -67,6 +67,34 @@ pub fn new(
         Err(_) => None,
     };
 
+    let diff_at_creation = match git2::Repository::open(&repo.root) {
+        Ok(git_repo) => {
+            let mut diff_opts = git2::DiffOptions::new();
+            diff_opts.include_untracked(true);
+            let diff = git_repo.diff_index_to_workdir(None, Some(&mut diff_opts)).ok();
+
+            let mut diff_text = String::new();
+            if let Some(d) = diff {
+                d.print(git2::DiffFormat::NameStatus, |_delta, _hunk, line| {
+                    if let Ok(s) = std::str::from_utf8(line.content()) {
+                        diff_text.push_str(s);
+                        if !s.ends_with('\n') {
+                            diff_text.push('\n');
+                        }
+                    }
+                    true
+                }).ok();
+            }
+
+            if diff_text.trim().is_empty() {
+                None
+            } else {
+                Some(diff_text)
+            }
+        }
+        Err(_) => None,
+    };
+
     let created_at = now.to_rfc3339();
 
     let experiment_json = serde_json::json!({
@@ -84,6 +112,9 @@ pub fn new(
         "started_at": null,
         "finished_at": null,
         "exit_code": null,
+        "env_snapshot": null,
+        "diff_at_creation": diff_at_creation,
+        "artifacts_index": [],
     });
 
     let json_path = exp_dir.join("experiment.json");
@@ -122,12 +153,17 @@ pub fn new(
     Ok((exp_id, exp_dir.to_string_lossy().to_string()))
 }
 
-pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32> {
+pub fn run(
+    repo: &Repository,
+    exp_id: &str,
+    extra_args: &[String],
+    timeout_secs: Option<u64>,
+) -> Result<i32> {
     let db = Database::open(&repo.db_path())?;
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::ExperimentNotFound(exp_id.to_string())),
     };
 
     if exp.status != "created" && exp.status != "interrupted" {
@@ -143,7 +179,8 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         command.push_str(&extra_args.join(" "));
     }
 
-    let log_dir = repo.exp_dir(exp_id).join("logs");
+    let exp_dir = repo.exp_dir(exp_id);
+    let log_dir = exp_dir.join("logs");
     fs::create_dir_all(&log_dir)?;
     let log_path = log_dir.join("run.log");
 
@@ -157,6 +194,10 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     let mut child = Command::new(&shell)
         .arg("-c")
         .arg(&command)
+        .env("ARCLI_EXP_DIR", &exp_dir)
+        .env("ARCLI_EXP_ID", exp_id)
+        .env("ARCLI_REPO_ROOT", &repo.root)
+        .env("ARCLI_LOG_DIR", &log_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -164,6 +205,10 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
     let mut child = Command::new("cmd")
         .arg("/C")
         .arg(&command)
+        .env("ARCLI_EXP_DIR", &exp_dir)
+        .env("ARCLI_EXP_ID", exp_id)
+        .env("ARCLI_REPO_ROOT", &repo.root)
+        .env("ARCLI_LOG_DIR", &log_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -222,7 +267,56 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         }
     });
 
-    let exit_status = child.wait()?;
+    let exit_status = match timeout_secs {
+        Some(secs) => {
+            use std::sync::mpsc;
+            use std::time::Duration;
+
+            let (tx, rx) = mpsc::channel();
+            let mut child_inner = child;
+            let _ = std::thread::spawn(move || {
+                let result = child_inner.wait();
+                let _ = tx.send(result);
+            });
+
+            match rx.recv_timeout(Duration::from_secs(secs)) {
+                Ok(result) => result?,
+                Err(_) => {
+                    // Kill the child process using its PID
+                    let _ = std::process::Command::new("kill")
+                        .arg("-9")
+                        .arg(child_id.to_string())
+                        .output();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
+
+                    let finished_at = chrono::Local::now().to_rfc3339();
+                    db.update_experiment_status(
+                        exp_id,
+                        "interrupted",
+                        None,
+                        Some(&finished_at),
+                        None,
+                    )?;
+                    update_exp_json_status(
+                        repo,
+                        exp_id,
+                        "interrupted",
+                        None,
+                        Some(&finished_at),
+                        None,
+                    )?;
+                    let _ = fs::remove_file(&pid_path);
+
+                    let _ = discover_artifacts(&repo.exp_dir(exp_id), &repo.root);
+
+                    return Err(ArcliError::ExperimentTimeout(secs));
+                }
+            }
+        }
+        None => child.wait()?,
+    };
+
     let _ = stdout_handle.join();
     let _ = stderr_handle.join();
 
@@ -253,6 +347,18 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
         Some(&finished_at),
         exit_code,
     )?;
+
+    // Discover and record artifacts
+    match discover_artifacts(&repo.exp_dir(exp_id), &repo.root) {
+        Ok(artifacts) => {
+            if let Err(e) = update_exp_json_artifacts(repo, exp_id, &artifacts) {
+                eprintln!("警告: artifact 索引写入失败: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("警告: artifact 扫描失败: {}", e);
+        }
+    }
 
     let _ = fs::remove_file(&pid_path);
 
@@ -586,6 +692,359 @@ fn update_exp_json_status(
     Ok(())
 }
 
+#[derive(Debug, serde::Serialize)]
+struct ArtifactEntry {
+    path: String,
+    size: u64,
+}
+
+fn discover_artifacts(
+    exp_dir: &std::path::Path,
+    repo_root: &std::path::Path,
+) -> Result<Vec<ArtifactEntry>> {
+    use walkdir::WalkDir;
+
+    let mut artifacts = Vec::new();
+
+    let git_repo = match git2::Repository::open(repo_root) {
+        Ok(r) => Some(r),
+        Err(_) => None,
+    };
+
+    for entry in WalkDir::new(exp_dir) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
+        let relative = path.strip_prefix(exp_dir).unwrap_or(path);
+        let relative_str = relative.to_string_lossy().to_string();
+
+        // Skip experiment.json itself
+        if relative_str == "experiment.json" {
+            continue;
+        }
+
+        // Skip logs/ directory
+        if relative_str.starts_with("logs/") || relative_str == "logs" {
+            continue;
+        }
+
+        // Skip hidden files
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with('.'))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        // Skip gitignored files
+        if let Some(ref repo) = git_repo {
+            let abs_path = path.to_path_buf();
+            if let Ok(ignored) = repo.status_should_ignore(&abs_path) {
+                if ignored {
+                    continue;
+                }
+            }
+        }
+
+        let size = entry.metadata()?.len();
+        artifacts.push(ArtifactEntry {
+            path: relative_str,
+            size,
+        });
+    }
+
+    artifacts.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(artifacts)
+}
+
+fn update_exp_json_artifacts(
+    repo: &Repository,
+    exp_id: &str,
+    artifacts: &[ArtifactEntry],
+) -> Result<()> {
+    let json_path = repo.exp_json_path(exp_id);
+    if !json_path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(&json_path)?;
+    let mut json: serde_json::Value = serde_json::from_str(&content)?;
+
+    if let Some(obj) = json.as_object_mut() {
+        let artifacts_json = serde_json::to_value(artifacts)?;
+        obj.insert("artifacts_index".to_string(), artifacts_json);
+    }
+
+    fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+    Ok(())
+}
+
+pub fn diff(repo: &Repository, exp_id_1: &str, exp_id_2: &str, full: bool) -> Result<String> {
+    let db = Database::open(&repo.db_path())?;
+
+    let exp1 = db
+        .get_experiment(exp_id_1)?
+        .ok_or_else(|| ArcliError::ExperimentNotFound(exp_id_1.to_string()))?;
+    let exp2 = db
+        .get_experiment(exp_id_2)?
+        .ok_or_else(|| ArcliError::ExperimentNotFound(exp_id_2.to_string()))?;
+
+    // Read experiment.json for diff_at_creation
+    let json1_path = repo.exp_json_path(exp_id_1);
+    let json2_path = repo.exp_json_path(exp_id_2);
+
+    let diff1 = if json1_path.exists() {
+        let content = fs::read_to_string(&json1_path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        json.get("diff_at_creation")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    let diff2 = if json2_path.exists() {
+        let content = fs::read_to_string(&json2_path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        json.get("diff_at_creation")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    let mut output = String::new();
+
+    // Print experiment 1 info
+    output.push_str(&format!("实验 {} ({})", exp_id_1, exp1.command));
+    if let Some(ref hash) = exp1.commit_hash {
+        output.push_str(&format!("\n  commit: {}", hash));
+    } else {
+        output.push_str("\n  commit: (无)");
+    }
+    output.push_str(&format!(
+        "\n  diff_at_creation: {}",
+        diff1.as_deref().unwrap_or("(无)")
+    ));
+    output.push('\n');
+
+    // Print experiment 2 info
+    output.push_str(&format!("\n实验 {} ({})", exp_id_2, exp2.command));
+    if let Some(ref hash) = exp2.commit_hash {
+        output.push_str(&format!("\n  commit: {}", hash));
+    } else {
+        output.push_str("\n  commit: (无)");
+    }
+    output.push_str(&format!(
+        "\n  diff_at_creation: {}",
+        diff2.as_deref().unwrap_or("(无)")
+    ));
+    output.push('\n');
+
+    // Git diff between commits
+    let hash1 = exp1.commit_hash.as_deref();
+    let hash2 = exp2.commit_hash.as_deref();
+
+    match (hash1, hash2) {
+        (Some(h1), Some(h2)) => {
+            if h1 == h2 {
+                return Err(ArcliError::Other(format!(
+                    "两个实验的 commit 相同 ('{}')",
+                    h1
+                )));
+            }
+
+            output.push_str(&format!("\ngit diff {}..{}:\n", h1, h2));
+            output.push_str("----------------------------------------\n");
+
+            let git_repo = git2::Repository::open(&repo.root)?;
+
+            // Verify commits exist
+            let oid1 = git2::Oid::from_str(h1)
+                .map_err(|_| ArcliError::Other(format!("无效的 commit hash: {}", h1)))?;
+            let oid2 = git2::Oid::from_str(h2)
+                .map_err(|_| ArcliError::Other(format!("无效的 commit hash: {}", h2)))?;
+
+            if git_repo.find_commit(oid1).is_err() {
+                return Err(ArcliError::CommitNotReachable(h1.to_string()));
+            }
+            if git_repo.find_commit(oid2).is_err() {
+                return Err(ArcliError::CommitNotReachable(h2.to_string()));
+            }
+
+            // Use git command for full diff output
+            let mut cmd = std::process::Command::new("git");
+            cmd.arg("-C").arg(&repo.root);
+            if full {
+                cmd.arg("diff").arg(format!("{}..{}", h1, h2));
+            } else {
+                cmd.arg("diff").arg("--stat").arg(format!("{}..{}", h1, h2));
+            }
+            let result = cmd.output()?;
+
+            if !result.status.success() {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                return Err(ArcliError::Other(format!("git diff 失败: {}", stderr)));
+            }
+
+            let diff_output = String::from_utf8_lossy(&result.stdout);
+            output.push_str(&diff_output);
+        }
+        (None, _) => {
+            return Err(ArcliError::Other(format!(
+                "实验 '{}' 未记录 commit hash（非 Git 仓库）",
+                exp_id_1
+            )));
+        }
+        (_, None) => {
+            return Err(ArcliError::Other(format!(
+                "实验 '{}' 未记录 commit hash（非 Git 仓库）",
+                exp_id_2
+            )));
+        }
+    }
+
+    Ok(output)
+}
+
+pub fn import(
+    repo: &Repository,
+    path: &str,
+    label: &str,
+    cmd: &str,
+    data_name: Option<String>,
+    move_dir: bool,
+    yes: bool,
+) -> Result<String> {
+    let source_path = std::path::PathBuf::from(path);
+
+    // Validate source is a directory
+    if !source_path.exists() || !source_path.is_dir() {
+        return Err(ArcliError::ImportPathInvalid(format!(
+            "'{}' 不是有效目录",
+            path
+        )));
+    }
+
+    // Check if already an experiment directory
+    if source_path.join("experiment.json").exists() {
+        return Err(ArcliError::ImportPathInvalid(
+            "目录已包含 experiment.json，拒绝导入已管理的实验".to_string(),
+        ));
+    }
+
+    // Confirm if not --yes
+    if !yes {
+        println!("即将导入目录 '{}' 为实验", source_path.display());
+        println!("标签: {}", label);
+        println!("命令: {}", cmd);
+        if move_dir {
+            println!("模式: 移动（原目录将被删除）");
+        } else {
+            println!("模式: 复制");
+        }
+        println!("确认? [y/N]");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            return Err(ArcliError::Other("导入已取消".to_string()));
+        }
+    }
+
+    let db = Database::open(&repo.db_path())?;
+    let short_id = db.next_short_id()?;
+    let short_id_str = format!("{:03}", short_id);
+
+    let now = chrono::Local::now();
+    let timestamp = now.format("%Y-%m-%d-%H%M").to_string();
+    let exp_id = format!("run-{}-{}_{}", short_id_str, timestamp, label);
+
+    let exp_dir = repo.experiments_dir().join(&exp_id);
+    fs::create_dir_all(&exp_dir)?;
+
+    // Copy or move contents
+    if move_dir {
+        for entry in fs::read_dir(&source_path)? {
+            let entry = entry?;
+            let dest = exp_dir.join(entry.file_name());
+            fs::rename(entry.path(), dest)?;
+        }
+    } else {
+        fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
+            fs::create_dir_all(dst)?;
+            for entry in fs::read_dir(src)? {
+                let entry = entry?;
+                let dest = dst.join(entry.file_name());
+                if entry.file_type()?.is_dir() {
+                    copy_dir_all(&entry.path(), &dest)?;
+                } else {
+                    fs::copy(entry.path(), dest)?;
+                }
+            }
+            Ok(())
+        }
+        copy_dir_all(&source_path, &exp_dir)?;
+    }
+
+    // Ensure logs dir exists
+    fs::create_dir_all(exp_dir.join("logs"))?;
+
+    let commit_hash = match git2::Repository::open(&repo.root) {
+        Ok(git_repo) => match git_repo.head() {
+            Ok(head) => head.target().map(|oid| oid.to_string()),
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+
+    let created_at = now.to_rfc3339();
+
+    let experiment_json = serde_json::json!({
+        "id": &exp_id,
+        "short_id": &short_id_str,
+        "status": "finished",
+        "created_at": &created_at,
+        "updated_at": &created_at,
+        "commit_hash": commit_hash,
+        "data_used": data_name.as_ref().map(|s| serde_json::Value::String(s.clone())).unwrap_or(serde_json::Value::Null),
+        "command": cmd,
+        "params": null,
+        "notes": format!("Imported from {}", source_path.display()),
+        "env": null,
+        "started_at": null,
+        "finished_at": &created_at,
+        "exit_code": null,
+        "env_snapshot": null,
+        "diff_at_creation": null,
+        "artifacts_index": [],
+    });
+
+    fs::write(
+        exp_dir.join("experiment.json"),
+        serde_json::to_string_pretty(&experiment_json)?,
+    )?;
+
+    db.insert_experiment(
+        &exp_id,
+        &short_id_str,
+        "finished",
+        &created_at,
+        commit_hash.as_deref(),
+        data_name.as_deref(),
+        cmd,
+        None,
+        Some(&format!("Imported from {}", source_path.display())),
+        None,
+    )?;
+
+    Ok(exp_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -884,7 +1343,7 @@ mod tests {
 
         assert!(!pid_path.exists());
 
-        run(&repo, "exp-001", &[]).unwrap();
+        run(&repo, "exp-001", &[], None).unwrap();
 
         assert!(!pid_path.exists());
 
@@ -901,7 +1360,7 @@ mod tests {
 
         let pid_path = repo.exp_dir("exp-002").join("pid");
 
-        let code = run(&repo, "exp-002", &[]).unwrap();
+        let code = run(&repo, "exp-002", &[], None).unwrap();
         assert_eq!(code, 42);
 
         assert!(!pid_path.exists());
@@ -923,7 +1382,7 @@ mod tests {
         };
 
         let run_handle = thread::spawn(move || {
-            run(&repo_clone, "exp-003", &[]).unwrap();
+            run(&repo_clone, "exp-003", &[], None).unwrap();
         });
 
         let mut found = false;
@@ -954,7 +1413,7 @@ mod tests {
         };
 
         let run_handle = thread::spawn(move || {
-            run(&repo_run, "exp-008", &[]).unwrap();
+            run(&repo_run, "exp-008", &[], None).unwrap();
         });
 
         let mut found = false;
@@ -1156,5 +1615,159 @@ mod tests {
         let exp = db.get_experiment("exp-007").unwrap().unwrap();
         assert_eq!(exp.status, "finished");
         assert!(exp.finished_at.is_some());
+    }
+
+    #[test]
+    fn test_run_timeout_kills_process() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-timeout", "sleep 10");
+
+        let start = std::time::Instant::now();
+        let result = run(&repo, "exp-timeout", &[], Some(1));
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "超时应返回错误");
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "应在 1 秒后终止"
+        );
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-timeout").unwrap().unwrap();
+        assert_eq!(exp.status, "interrupted");
+    }
+
+    #[test]
+    fn test_run_timeout_clean_exit() {
+        let (repo, _dir) = create_test_repo();
+        create_test_experiment(&repo, "exp-clean", "echo done");
+
+        let code = run(&repo, "exp-clean", &[], Some(10)).unwrap();
+        assert_eq!(code, 0);
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment("exp-clean").unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+    }
+
+    #[test]
+    fn test_run_injects_env_vars() {
+        let (repo, _dir) = create_test_repo();
+        let script = repo.root.join("print_env.sh");
+        fs::write(
+            &script,
+            "#!/bin/sh\necho \"EXP_DIR=$ARCLI_EXP_DIR\"\necho \"EXP_ID=$ARCLI_EXP_ID\"\necho \"REPO_ROOT=$ARCLI_REPO_ROOT\"\necho \"LOG_DIR=$ARCLI_LOG_DIR\"\n",
+        )
+        .unwrap();
+        let script_path = script.to_string_lossy().to_string();
+        create_test_experiment(&repo, "exp-env", &format!("sh '{}'", script_path));
+
+        run(&repo, "exp-env", &[], None).unwrap();
+
+        let log_path = repo.exp_log_path("exp-env");
+        let log_content = fs::read_to_string(&log_path).unwrap();
+        assert!(log_content.contains("EXP_DIR="));
+        assert!(log_content.contains("EXP_ID=exp-env"));
+        assert!(log_content.contains("REPO_ROOT="));
+        assert!(log_content.contains("LOG_DIR="));
+    }
+
+    #[test]
+    fn test_discover_artifacts_skips_logs() {
+        let (repo, _dir) = create_test_repo();
+        let exp_dir = repo.exp_dir("exp-art");
+        fs::create_dir_all(&exp_dir).unwrap();
+        fs::create_dir_all(exp_dir.join("logs")).unwrap();
+        fs::create_dir_all(exp_dir.join("artifacts")).unwrap();
+        fs::write(exp_dir.join("logs/run.log"), "log content").unwrap();
+        fs::write(exp_dir.join("artifacts/results.csv"), "a,b\n1,2\n").unwrap();
+        fs::write(exp_dir.join("experiment.json"), "{}").unwrap();
+
+        let artifacts = discover_artifacts(&exp_dir, &repo.root).unwrap();
+        let paths: Vec<&str> = artifacts.iter().map(|a| a.path.as_str()).collect();
+        assert!(paths.contains(&"artifacts/results.csv"));
+        assert!(!paths.contains(&"logs/run.log"));
+        assert!(!paths.contains(&"experiment.json"));
+    }
+
+    #[test]
+    fn test_discover_artifacts_respects_gitignore() {
+        let (repo, _dir) = create_test_repo();
+        let exp_dir = repo.exp_dir("exp-git");
+        fs::create_dir_all(&exp_dir).unwrap();
+        fs::write(exp_dir.join("tracked.txt"), "tracked").unwrap();
+        fs::write(exp_dir.join("ignored.pyc"), "ignored").unwrap();
+        fs::write(exp_dir.join("experiment.json"), "{}").unwrap();
+
+        let artifacts = discover_artifacts(&exp_dir, &repo.root).unwrap();
+        let paths: Vec<&str> = artifacts.iter().map(|a| a.path.as_str()).collect();
+        assert!(paths.contains(&"tracked.txt"));
+    }
+
+    #[test]
+    fn test_diff_at_creation_field_exists() {
+        let (repo, _dir) = create_test_repo();
+
+        let (exp_id, _) = new(
+            &repo,
+            None,
+            Some("echo hello".to_string()),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let json_path = repo.exp_json_path(&exp_id);
+        let content = fs::read_to_string(&json_path).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // diff_at_creation field should exist (null when workspace is clean)
+        assert!(
+            json.get("diff_at_creation").is_some(),
+            "diff_at_creation 字段应存在"
+        );
+    }
+
+    #[test]
+    fn test_import_creates_experiment() {
+        let (repo, _dir) = create_test_repo();
+        let source = repo.root.join("legacy-exp");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("results.csv"), "a,b\n1,2\n").unwrap();
+
+        let exp_id = import(
+            &repo,
+            source.to_str().unwrap(),
+            "legacy",
+            "python run.py",
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+
+        let exp_dir = repo.exp_dir(&exp_id);
+        assert!(exp_dir.exists());
+        assert!(exp_dir.join("results.csv").exists());
+        assert!(exp_dir.join("experiment.json").exists());
+
+        let db = Database::open(&repo.db_path()).unwrap();
+        let exp = db.get_experiment(&exp_id).unwrap().unwrap();
+        assert_eq!(exp.status, "finished");
+        assert_eq!(exp.command, "python run.py");
+    }
+
+    #[test]
+    fn test_import_rejects_existing_experiment() {
+        let (repo, _dir) = create_test_repo();
+        let source = repo.root.join("existing-exp");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("experiment.json"), "{}").unwrap();
+
+        let result = import(&repo, source.to_str().unwrap(), "existing", "cmd", None, false, true);
+        assert!(matches!(result, Err(ArcliError::ImportPathInvalid(_))));
     }
 }

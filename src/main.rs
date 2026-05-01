@@ -14,18 +14,60 @@ use arcli::repo::Repository;
 fn main() {
     let cli = Cli::parse();
 
+    let json_mode = match &cli.command {
+        Commands::Project(cmd) => matches!(cmd, ProjectCommands::Init { json: true, .. }),
+        Commands::Env(cmd) => matches!(
+            cmd,
+            EnvCommands::Status { json: true, .. } | EnvCommands::Check { json: true, .. }
+        ),
+        Commands::Data(cmd) => matches!(
+            cmd,
+            DataCommands::Register { json: true, .. }
+                | DataCommands::List { json: true }
+                | DataCommands::Info { json: true, .. }
+                | DataCommands::Update { json: true, .. }
+                | DataCommands::Verify { json: true, .. }
+        ),
+        Commands::Exp(cmd) => matches!(
+            cmd,
+            ExpCommands::New { json: true, .. }
+                | ExpCommands::Run { json: true, .. }
+                | ExpCommands::Stop { json: true, .. }
+                | ExpCommands::Status { json: true, .. }
+                | ExpCommands::Metric { json: true, .. }
+                | ExpCommands::Param { json: true, .. }
+                | ExpCommands::Finish { json: true, .. }
+                | ExpCommands::Export { json: true, .. }
+                | ExpCommands::List { json: true, .. }
+                | ExpCommands::Import { json: true, .. }
+                | ExpCommands::Diff { json: true, .. }
+        ),
+        Commands::Db(cmd) => matches!(
+            cmd,
+            DbCommands::Sync { json: true, .. }
+                | DbCommands::ExportAll { json: true, .. }
+                | DbCommands::Import { json: true, .. }
+                | DbCommands::Status { json: true }
+        ),
+        Commands::Log(cmd) => matches!(cmd, LogCommands::Show { json: true, .. }),
+        Commands::Config(cmd) => matches!(
+            cmd,
+            ConfigCommands::Get { json: true, .. } | ConfigCommands::Set { json: true, .. }
+        ),
+    };
+
     let result = match &cli.command {
-        Commands::Project(cmd) => handle_project(cmd, cli.json),
-        Commands::Env(cmd) => handle_env(cmd, cli.repo.as_deref(), cli.json),
-        Commands::Data(cmd) => handle_data(cmd, cli.repo.as_deref(), cli.json),
-        Commands::Exp(cmd) => handle_exp(cmd, cli.repo.as_deref(), cli.json),
-        Commands::Db(cmd) => handle_db(cmd, cli.repo.as_deref(), cli.json),
-        Commands::Log(cmd) => handle_log(cmd, cli.repo.as_deref(), cli.json),
-        Commands::Config(cmd) => handle_config(cmd, cli.repo.as_deref(), cli.json),
+        Commands::Project(cmd) => handle_project(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Env(cmd) => handle_env(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Data(cmd) => handle_data(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Exp(cmd) => handle_exp(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Db(cmd) => handle_db(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Log(cmd) => handle_log(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Config(cmd) => handle_config(cmd, cli.repo.as_deref(), json_mode),
     };
 
     if let Err(e) = result {
-        output::print_error(&e, cli.json);
+        output::print_error(&e, json_mode);
         std::process::exit(1);
     }
 }
@@ -36,7 +78,11 @@ fn get_repo(repo_override: Option<&str>) -> Result<Repository, ArcliError> {
     Repository::discover(start_ref)
 }
 
-fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), ArcliError> {
+fn handle_project(
+    cmd: &ProjectCommands,
+    _repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), ArcliError> {
     match cmd {
         ProjectCommands::Init {
             path,
@@ -46,6 +92,7 @@ fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), ArcliErr
             research_type,
             stack,
             zh,
+            json: _,
         } => {
             let created = project::init(
                 path.clone(),
@@ -76,7 +123,7 @@ fn handle_env(
 ) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        EnvCommands::Status => {
+        EnvCommands::Status { json: _ } => {
             let status = env::status(&repo)?;
             if json_mode {
                 output::print_json(&status);
@@ -107,7 +154,7 @@ fn handle_env(
             }
             Ok(())
         }
-        EnvCommands::Check { strict } => {
+        EnvCommands::Check { strict, json: _ } => {
             env::check(&repo, *strict)?;
             if json_mode {
                 println!("{}", serde_json::json!({"status": "ok"}));
@@ -131,6 +178,7 @@ fn handle_data(
             name,
             desc,
             checksum,
+            json: _,
         } => {
             data::register(&repo, path, name, desc.clone(), checksum.clone())?;
             if json_mode {
@@ -143,7 +191,7 @@ fn handle_data(
             }
             Ok(())
         }
-        DataCommands::List => {
+        DataCommands::List { json: _ } => {
             let datasets = data::list(&repo)?;
             if json_mode {
                 output::print_json(&datasets);
@@ -156,16 +204,22 @@ fn handle_data(
             }
             Ok(())
         }
-        DataCommands::Info { name } => {
+        DataCommands::Info { name, json: _ } => {
             let ds = data::info(&repo, name)?;
+            let status = data::dataset_status(&repo, name)?;
             if json_mode {
-                output::print_json(&ds);
+                let mut val = serde_json::to_value(&ds)?;
+                if let Some(obj) = val.as_object_mut() {
+                    obj.insert("status".to_string(), serde_json::Value::String(status));
+                }
+                output::print_json(&val);
             } else {
                 println!("名称: {}", ds.name);
                 println!("路径: {}", ds.path);
                 if let Some(ref cs) = ds.checksum {
-                    println!("校验和: {}", cs);
+                    println!("注册校验和: {}", cs);
                 }
+                println!("状态: {}", status.to_uppercase());
                 if let Some(ref desc) = ds.description {
                     println!("描述: {}", desc);
                 }
@@ -177,12 +231,40 @@ fn handle_data(
             name,
             path,
             recompute_checksum,
+            json: _,
         } => {
             data::update(&repo, name, path.clone(), *recompute_checksum)?;
             if json_mode {
-                println!("{}", serde_json::json!({"name": name, "status": "updated"}));
+                println!(
+                    "{}",
+                    serde_json::json!({"name": name, "status": "updated"})
+                );
             } else {
                 println!("数据资产 '{}' 已更新", name);
+            }
+            Ok(())
+        }
+        DataCommands::Verify {
+            changed_only,
+            json: _,
+        } => {
+            let results = data::verify(&repo, *changed_only)?;
+            if json_mode {
+                output::print_json(&results);
+            } else {
+                println!(
+                    "{:<20} {:<15} {:<10} {}",
+                    "名称", "路径", "状态", "注册时间"
+                );
+                for r in &results {
+                    println!(
+                        "{:<20} {:<15} {:<10} {}",
+                        r.name,
+                        r.path,
+                        r.status.to_uppercase(),
+                        r.registered_at
+                    );
+                }
             }
             Ok(())
         }
@@ -205,6 +287,7 @@ fn handle_exp(
             notes,
             env: env_name,
             template,
+            json: _,
         } => {
             let (exp_id, exp_dir) = exp::new(
                 &repo,
@@ -230,8 +313,13 @@ fn handle_exp(
             }
             Ok(())
         }
-        ExpCommands::Run { exp_id, args } => {
-            let exit_code = exp::run(&repo, exp_id, args)?;
+        ExpCommands::Run {
+            exp_id,
+            args,
+            timeout,
+            json: _,
+        } => {
+            let exit_code = exp::run(&repo, exp_id, args, *timeout)?;
             if json_mode {
                 let result = serde_json::json!({ "exit_code": exit_code });
                 output::print_json(&result);
@@ -240,7 +328,11 @@ fn handle_exp(
             }
             Ok(())
         }
-        ExpCommands::Stop { exp_id, signal } => {
+        ExpCommands::Stop {
+            exp_id,
+            signal,
+            json: _,
+        } => {
             exp::stop(&repo, exp_id, signal)?;
             if json_mode {
                 println!(
@@ -252,7 +344,7 @@ fn handle_exp(
             }
             Ok(())
         }
-        ExpCommands::Status { exp_id } => {
+        ExpCommands::Status { exp_id, json: _ } => {
             let status = exp::status(&repo, exp_id.as_deref())?;
             if json_mode {
                 output::print_json(&status);
@@ -263,7 +355,11 @@ fn handle_exp(
             }
             Ok(())
         }
-        ExpCommands::List { status, since } => {
+        ExpCommands::List {
+            status,
+            since,
+            json: _,
+        } => {
             let exps = exp::list(&repo, status.as_deref(), since.as_deref())?;
             if json_mode {
                 output::print_json(&exps);
@@ -280,10 +376,17 @@ fn handle_exp(
             }
             Ok(())
         }
-        ExpCommands::Export { exp_id, output } => {
+        ExpCommands::Export {
+            exp_id,
+            output,
+            json: _,
+        } => {
             let path = exp::export(&repo, exp_id, output.as_deref())?;
             if json_mode {
-                println!("{}", serde_json::json!({"exp_id": exp_id, "path": path}));
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "path": path})
+                );
             } else {
                 println!("实验已导出到: {}", path);
             }
@@ -295,6 +398,7 @@ fn handle_exp(
             metrics_json,
             keys,
             vals,
+            json: _,
         } => {
             exp::metric(&repo, exp_id, *step, metrics_json.as_deref(), keys, vals)?;
             if json_mode {
@@ -310,6 +414,7 @@ fn handle_exp(
         ExpCommands::Param {
             exp_id,
             params_json,
+            json: _,
         } => {
             exp::param(&repo, exp_id, params_json)?;
             if json_mode {
@@ -326,6 +431,7 @@ fn handle_exp(
             exp_id,
             status,
             message,
+            json: _,
         } => {
             exp::finish(&repo, exp_id, status, message.as_deref())?;
             if json_mode {
@@ -335,6 +441,40 @@ fn handle_exp(
                 );
             } else {
                 println!("实验 {} 已标记为 {}", exp_id, status);
+            }
+            Ok(())
+        }
+        ExpCommands::Import {
+            path,
+            label,
+            cmd,
+            data,
+            move_dir,
+            yes,
+            json: _,
+        } => {
+            let exp_id = exp::import(&repo, path, label, cmd, data.clone(), *move_dir, *yes)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"id": exp_id, "status": "imported"})
+                );
+            } else {
+                println!("实验已导入: {}", exp_id);
+            }
+            Ok(())
+        }
+        ExpCommands::Diff {
+            exp_id_1,
+            exp_id_2,
+            full,
+            json: _,
+        } => {
+            let diff_output = exp::diff(&repo, exp_id_1, exp_id_2, *full)?;
+            if json_mode {
+                println!("{}", serde_json::json!({"diff": diff_output}));
+            } else {
+                println!("{}", diff_output);
             }
             Ok(())
         }
@@ -348,7 +488,7 @@ fn handle_db(
 ) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        DbCommands::Sync { mode } => {
+        DbCommands::Sync { mode, json: _ } => {
             db::sync(&repo, mode)?;
             if json_mode {
                 println!("{}", serde_json::json!({"mode": mode, "status": "synced"}));
@@ -357,7 +497,7 @@ fn handle_db(
             }
             Ok(())
         }
-        DbCommands::ExportAll { out_dir } => {
+        DbCommands::ExportAll { out_dir, json: _ } => {
             db::export_all(&repo, out_dir.as_deref())?;
             if json_mode {
                 println!("{}", serde_json::json!({"status": "exported"}));
@@ -366,7 +506,7 @@ fn handle_db(
             }
             Ok(())
         }
-        DbCommands::Import { from } => {
+        DbCommands::Import { from, json: _ } => {
             db::import_from(&repo, from)?;
             if json_mode {
                 println!(
@@ -378,7 +518,7 @@ fn handle_db(
             }
             Ok(())
         }
-        DbCommands::Status => {
+        DbCommands::Status { json: _ } => {
             let status = db::status(&repo)?;
             if json_mode {
                 output::print_json(&status);
@@ -407,6 +547,7 @@ fn handle_log(
             exp_id,
             tail,
             follow,
+            json: _,
         } => {
             if json_mode && !follow {
                 let log_path = repo.exp_log_path(exp_id);
@@ -444,7 +585,7 @@ fn handle_config(
 ) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
-        ConfigCommands::Get { key } => {
+        ConfigCommands::Get { key, json: _ } => {
             let value = config::get(&repo, key)?;
             if json_mode {
                 let result = serde_json::json!({ "key": key, "value": value });
@@ -454,7 +595,7 @@ fn handle_config(
             }
             Ok(())
         }
-        ConfigCommands::Set { key, value } => {
+        ConfigCommands::Set { key, value, json: _ } => {
             config::set(&repo, key, value)?;
             if json_mode {
                 println!(
