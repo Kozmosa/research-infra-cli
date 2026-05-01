@@ -18,6 +18,7 @@ const GITIGNORE_GO: &str = include_str!("../templates/gitignore/go.txt");
 // CONFIG_TEMPLATE reserved for future use
 // const CONFIG_TEMPLATE: &str = include_str!("../templates/config/default.yaml");
 const PROJECT_BASIS_TEMPLATE: &str = include_str!("../templates/docs/project_basis.md");
+const HOOKS_README_TEMPLATE: &str = include_str!("../templates/hooks/README.md");
 
 fn render_template(template: &str, vars: &HashMap<&str, &str>) -> String {
     let mut result = template.to_string();
@@ -281,6 +282,13 @@ pub fn init(
     config.save(&config_path)?;
     created.push(config_path.to_string_lossy().to_string());
 
+    // Generate default hooks README
+    let hooks_readme = research_dir.join("hooks").join("README.md");
+    if !hooks_readme.exists() {
+        fs::write(&hooks_readme, HOOKS_README_TEMPLATE)?;
+        created.push(hooks_readme.to_string_lossy().to_string());
+    }
+
     // Generate research.db
     let db_path = research_dir.join("research.db");
     let db = Database::open(&db_path)?;
@@ -349,6 +357,7 @@ mod tests {
         assert!(target.join(".research").exists());
         assert!(target.join(".research/templates").exists());
         assert!(target.join(".research/hooks").exists());
+        assert!(target.join(".research/hooks/README.md").exists());
 
         assert!(target.join(".gitignore").exists());
         assert!(target.join("README.md").exists());
