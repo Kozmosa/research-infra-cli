@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
 pub fn show(repo: &Repository, exp_id: &str, tail: Option<usize>, follow: bool) -> Result<()> {
@@ -21,7 +21,7 @@ fn show_inner(
 ) -> Result<()> {
     let log_path = repo.exp_log_path(exp_id);
     if !log_path.exists() {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 的日志文件不存在",
             exp_id
         )));

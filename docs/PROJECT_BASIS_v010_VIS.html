@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>arcli v0.1.0 — Project Basis</title>
+  <style>
+    :root {
+      --fg: #0a0a0a;
+      --fg-muted: #555;
+      --fg-faint: #999;
+      --bg: #fff;
+      --bg-subtle: #f7f7f7;
+      --border: #e0e0e0;
+      --accent: #0a0a0a;
+      --max-width: 720px;
+      --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+      --font-mono: "SF Mono", "SFMono-Regular", "Fira Code", "JetBrains Mono", Consolas, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 17px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Navigation */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+
+    nav .nav-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      height: 3.2rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    nav .nav-inner::-webkit-scrollbar { display: none; }
+
+    nav a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color 0.2s;
+    }
+
+    nav a:hover, nav a.active {
+      color: var(--fg);
+    }
+
+    nav .brand {
+      font-weight: 700;
+      color: var(--fg);
+      margin-right: auto;
+    }
+
+    /* Sections */
+    section {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    /* Hero */
+    #hero {
+      padding-top: 5rem;
+      padding-bottom: 5rem;
+      text-align: center;
+    }
+
+    .logo-mark {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 2rem;
+      position: relative;
+    }
+
+    .logo-mark::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 2px dashed var(--fg);
+      border-radius: 50%;
+      opacity: 0.3;
+    }
+
+    .logo-mark::after {
+      content: "";
+      position: absolute;
+      width: 36px;
+      height: 36px;
+      background: var(--fg);
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+
+    #hero .tagline {
+      font-size: 1.15rem;
+      color: var(--fg-muted);
+      max-width: 520px;
+      margin: 0 auto 2rem;
+    }
+
+    #hero .meta {
+      font-size: 0.85rem;
+      color: var(--fg-faint);
+    }
+
+    #hero .meta strong {
+      color: var(--fg);
+      font-weight: 600;
+    }
+
+    /* Typography */
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.5rem;
+      padding-top: 1rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.01em;
+    }
+
+    h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      color: var(--fg-muted);
+    }
+
+    p strong {
+      color: var(--fg);
+      font-weight: 600;
+    }
+
+    a {
+      color: var(--fg);
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+    }
+
+    a:hover {
+      text-decoration: none;
+    }
+
+    /* Code */
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--bg-subtle);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+    }
+
+    pre {
+      background: var(--bg-subtle);
+      padding: 1rem 1.25rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 1.5rem 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    /* Lists */
+    ul, ol {
+      margin: 1rem 0 1rem 1.25rem;
+      color: var(--fg-muted);
+    }
+
+    li {
+      margin-bottom: 0.4rem;
+    }
+
+    /* Tree */
+    .tree {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.8;
+      background: var(--bg-subtle);
+      padding: 1.25rem;
+      border-radius: 6px;
+      margin: 1.5rem 0;
+    }
+
+    .tree-node {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .tree-node:hover {
+      color: var(--fg);
+    }
+
+    .tree-toggle {
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+      margin-right: 0.25em;
+      color: var(--fg-faint);
+    }
+
+    .tree-children {
+      padding-left: 1.5em;
+      display: block;
+    }
+
+    .tree-children.collapsed {
+      display: none;
+    }
+
+    /* State Machine */
+    .state-machine {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 2rem 0;
+      padding: 1.5rem;
+      background: var(--bg-subtle);
+      border-radius: 8px;
+    }
+
+    .state-node {
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: var(--bg);
+    }
+
+    .state-node.active {
+      border-color: var(--fg);
+      background: var(--fg);
+      color: var(--bg);
+    }
+
+    .state-arrow {
+      color: var(--fg-faint);
+      font-size: 0.85rem;
+    }
+
+    /* Cards */
+    .card-grid {
+      display: grid;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    @media (min-width: 640px) {
+      .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+      .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--fg);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .card h4 {
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .card p {
+      margin-bottom: 0;
+      font-size: 0.9rem;
+    }
+
+    .card .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg-faint);
+      margin-bottom: 0.5rem;
+    }
+
+    /* Command table */
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 1.5rem 0;
+    }
+
+    .cmd-table th {
+      text-align: left;
+      font-weight: 600;
+      color: var(--fg);
+      border-bottom: 2px solid var(--border);
+      padding: 0.6rem 0.5rem;
+    }
+
+    .cmd-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 0.5rem;
+      color: var(--fg-muted);
+      vertical-align: top;
+    }
+
+    .cmd-table tr:hover td {
+      background: var(--bg-subtle);
+    }
+
+    .cmd-search {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      outline: none;
+    }
+
+    .cmd-search:focus {
+      border-color: var(--fg);
+    }
+
+    /* Phase timeline */
+    .phase {
+      margin: 2rem 0;
+      padding-left: 1.5rem;
+      border-left: 2px solid var(--border);
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .phase-num {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--fg-faint);
+    }
+
+    .phase-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    /* Architecture stack */
+    .arch-stack {
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .arch-layer {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 0.75rem;
+      position: relative;
+    }
+
+    .arch-layer-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--fg-faint);
+      margin-bottom: 0.75rem;
+    }
+
+    .arch-layer-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+
+    .arch-item {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg);
+    }
+
+    .arch-item-name {
+      font-weight: 700;
+      color: var(--fg);
+    }
+
+    .arch-item-tech {
+      font-size: 0.72rem;
+      color: var(--fg-faint);
+      font-family: var(--font-mono);
+    }
+
+    .arch-item-desc {
+      font-size: 0.78rem;
+      color: var(--fg-muted);
+      margin-left: 0.3rem;
+    }
+
+    .arch-connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 28px;
+      position: relative;
+    }
+
+    .arch-connector-line {
+      width: 2px;
+      height: 100%;
+      background: var(--border);
+    }
+
+    .arch-connector-label {
+      position: absolute;
+      font-size: 0.7rem;
+      color: var(--fg-faint);
+      background: var(--bg);
+      padding: 0 0.5rem;
+      white-space: nowrap;
+    }
+
+    .arch-layer-4 { border-left: 3px solid #1a1a1a; }
+    .arch-layer-3 { border-left: 3px solid #555; }
+    .arch-layer-2 { border-left: 3px solid #999; }
+    .arch-layer-1 { border-left: 3px solid #ccc; }
+
+    /* Scroll reveal */
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: var(--fg-faint);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      html { font-size: 16px; }
+      section { padding: 2.5rem 1rem; }
+      #hero { padding-top: 3rem; padding-bottom: 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#hero" class="brand">arcli</a>
+    <a href="#overview">概览</a>
+    <a href="#structure">结构</a>
+    <a href="#workflow">工作流</a>
+    <a href="#state-machine">状态机</a>
+    <a href="#commands">命令</a>
+    <a href="#sync">同步</a>
+    <a href="#stack">架构</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="logo-mark"></div>
+  <h1>arcli v0.1.0</h1>
+  <p class="tagline">Research CLI — 预结构化、可复现、低熵的研究工作环境</p>
+  <p class="meta"><strong>Rust</strong> · SQLite WAL · 62 tests · <strong>v0.1.0</strong></p>
+</section>
+
+<!-- Overview -->
+<section id="overview" class="reveal">
+  <h2>项目概览</h2>
+
+  <div class="card-grid cols-3">
+    <div class="card">
+      <span class="tag">核心问题</span>
+      <h4>Agent 即兴探索</h4>
+      <p>LLM Agent 自行创建目录、推断文件位置、执行 shell 命令探测环境，导致不可复现、高摩擦、协作困难。</p>
+    </div>
+    <div class="card">
+      <span class="tag">解决方案</span>
+      <h4>确定性契约</h4>
+      <p>将实验完整生命周期纳入确定性的文件系统契约，所有 ground truth 通过 CLI 命令获取。</p>
+    </div>
+    <div class="card">
+      <span class="tag">目标用户</span>
+      <h4>AI Agent + 人类</h4>
+      <p>Agent 通过 --json 消费结构化数据，人类通过文本输出理解状态，两者共享同一事实来源。</p>
+    </div>
+  </div>
+
+  <h3>关键指标</h3>
+  <table class="cmd-table">
+    <tr><th>指标</th><th>数值</th></tr>
+    <tr><td>代码行数</td><td>~4,750 行 Rust</td></tr>
+    <tr><td>单元测试</td><td>68 个，全部通过</td></tr>
+    <tr><td>子命令</td><td>7 个命令组，25+ 个命令</td></tr>
+    <tr><td>数据库</td><td>SQLite WAL 模式，原子 short_id 分配</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions，跨平台 release 构建</td></tr>
+  </table>
+</section>
+
+<!-- Structure -->
+<section id="structure" class="reveal">
+  <h2>仓库结构</h2>
+  <p>点击目录可折叠/展开子目录。</p>
+
+  <div class="tree" id="dir-tree">
+    <div class="tree-node" onclick="toggleTree(this)">
+      <span class="tree-toggle">-</span>📁 research-infra-cli/
+    </div>
+    <div class="tree-children">
+      <div class="tree-node" onclick="toggleTree(this)">
+        <span class="tree-toggle">-</span>📁 src/
+      </div>
+      <div class="tree-children">
+        <div>📄 main.rs <span style="color:var(--fg-faint)">— CLI 入口</span></div>
+        <div>📄 cli.rs <span style="color:var(--fg-faint)">— clap 派生宏</span></div>
+        <div>📄 lib.rs <span style="color:var(--fg-faint)">— 库入口</span></div>
+        <div>📄 repo.rs <span style="color:var(--fg-faint)">— 仓库发现</span></div>
+        <div>📄 config.rs <span style="color:var(--fg-faint)">— 配置读写</span></div>
+        <div>📄 db.rs <span style="color:var(--fg-faint)">— SQLite 封装</span></div>
+        <div>📄 error.rs <span style="color:var(--fg-faint)">— 错误枚举</span></div>
+        <div>📄 output.rs <span style="color:var(--fg-faint)">— 输出格式化</span></div>
+        <div class="tree-node" onclick="toggleTree(this)">
+          <span class="tree-toggle">-</span>📁 templates/
+        </div>
+        <div class="tree-children">
+          <div>📄 gitignore/ <span style="color:var(--fg-faint)">— 按技术栈的 gitignore 模板</span></div>
+          <div>📄 readme/ <span style="color:var(--fg-faint)">— README 模板（中英双语）</span></div>
+          <div>📄 config/ <span style="color:var(--fg-faint)">— config.yaml 模板</span></div>
+          <div>📄 experiment/ <span style="color:var(--fg-faint)">— experiment.json 模板</span></div>
+          <div>📄 docs/ <span style="color:var(--fg-faint)">— PROJECT_BASIS 模板</span></div>
+        </div>
+        <div class="tree-node" onclick="toggleTree(this)">
+          <span class="tree-toggle">-</span>📁 commands/
+        </div>
+        <div class="tree-children">
+          <div>📄 project.rs <span style="color:var(--fg-faint)">— project init</span></div>
+          <div>📄 env.rs <span style="color:var(--fg-faint)">— env status/check</span></div>
+          <div>📄 data.rs <span style="color:var(--fg-faint)">— data register/list</span></div>
+          <div>📄 exp.rs <span style="color:var(--fg-faint)">— exp new/run/stop</span></div>
+          <div>📄 db.rs <span style="color:var(--fg-faint)">— db sync/export/import</span></div>
+          <div>📄 log.rs <span style="color:var(--fg-faint)">— log show</span></div>
+          <div>📄 config.rs <span style="color:var(--fg-faint)">— config get/set</span></div>
+        </div>
+      </div>
+      <div>📁 docs/ <span style="color:var(--fg-faint)">— 项目文档</span></div>
+      <div>📄 Cargo.toml <span style="color:var(--fg-faint)">— 包配置</span></div>
+      <div>📄 README.md <span style="color:var(--fg-faint)">— 项目总览</span></div>
+      <div>📄 PRD.md <span style="color:var(--fg-faint)">— 产品需求文档</span></div>
+      <div>📄 LICENSE <span style="color:var(--fg-faint)">— MIT</span></div>
+      <div>📁 .github/workflows/ <span style="color:var(--fg-faint)">— CI/CD</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Workflow -->
+<section id="workflow" class="reveal">
+  <h2>arcli 工作流</h2>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">01</span>
+      <span class="phase-title">初始化仓库</span>
+    </div>
+    <p>生成标准研究仓库目录树，自动检测技术栈。</p>
+    <pre><code>arcli project init ./my-project --name "My Project" --research-type ml --zh</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">02</span>
+      <span class="phase-title">注册数据</span>
+    </div>
+    <p>将数据集注册为资产，计算 SHA256 校验和。</p>
+    <pre><code>arcli data register ./data/raw --name my-dataset --desc "Dataset description"</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">03</span>
+      <span class="phase-title">创建实验</span>
+    </div>
+    <p>声明数据、命令、环境，生成唯一实验 ID。</p>
+    <pre><code>arcli exp new --data my-dataset --cmd "python train.py --epochs 10" --label baseline</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">04</span>
+      <span class="phase-title">执行实验</span>
+    </div>
+    <p>运行命令，自动捕获 stdout/stderr 到日志。</p>
+    <pre><code>arcli exp run run-001-20260501-1200_baseline</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">05</span>
+      <span class="phase-title">记录指标</span>
+    </div>
+    <p>按 step 记录结构化指标，支持覆盖更新。</p>
+    <pre><code>arcli exp metric run-001-20260501-1200_baseline --step 1 --json '{"loss":0.5,"acc":0.92}'</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">06</span>
+      <span class="phase-title">同步归档</span>
+    </div>
+    <p>导出 SQLite 到 JSON，纳入版本控制。</p>
+    <pre><code>arcli db sync --mode export
+git add experiments/*/experiment.json</code></pre>
+  </div>
+</section>
+
+<!-- State Machine -->
+<section id="state-machine" class="reveal">
+  <h2>实验状态机</h2>
+  <p>实验在其生命周期中经历以下状态。</p>
+
+  <div class="state-machine">
+    <div class="state-node" id="state-created">created</div>
+    <span class="state-arrow">→</span>
+    <div class="state-node" id="state-running">running</div>
+    <span class="state-arrow">→</span>
+    <div class="state-node" id="state-finished">finished</div>
+  </div>
+
+  <div style="text-align:center; margin-top:1rem; font-size:0.85rem; color:var(--fg-faint)">
+    <div style="margin:0.5rem 0">running → <span style="color:var(--fg-muted)">exit(≠0)</span> → <strong>failed</strong></div>
+    <div style="margin:0.5rem 0">running → <span style="color:var(--fg-muted)">SIGTERM</span> → <strong>interrupted</strong> → resume → running</div>
+  </div>
+</section>
+
+<!-- Commands -->
+<section id="commands" class="reveal">
+  <h2>命令速查</h2>
+  <input type="text" class="cmd-search" placeholder="搜索命令..." oninput="filterCommands(this.value)">
+
+  <table class="cmd-table" id="cmd-table">
+    <tr><th>命令</th><th>说明</th></tr>
+    <tr data-cmd="project init"><td><code>arcli project init [PATH]</code></td><td>初始化研究仓库</td></tr>
+    <tr data-cmd="env status"><td><code>arcli env status</code></td><td>查看环境快照</td></tr>
+    <tr data-cmd="env check"><td><code>arcli env check --strict</code></td><td>严格检查工作区</td></tr>
+    <tr data-cmd="data register"><td><code>arcli data register PATH --name NAME</code></td><td>注册数据资产</td></tr>
+    <tr data-cmd="data list"><td><code>arcli data list</code></td><td>列出数据资产</td></tr>
+    <tr data-cmd="data info"><td><code>arcli data info NAME</code></td><td>查看数据详情</td></tr>
+    <tr data-cmd="exp new"><td><code>arcli exp new --data NAME --cmd CMD</code></td><td>创建实验</td></tr>
+    <tr data-cmd="exp run"><td><code>arcli exp run EXP_ID</code></td><td>执行实验</td></tr>
+    <tr data-cmd="exp stop"><td><code>arcli exp stop EXP_ID</code></td><td>终止实验</td></tr>
+    <tr data-cmd="exp status"><td><code>arcli exp status [EXP_ID]</code></td><td>查看实验状态</td></tr>
+    <tr data-cmd="exp metric"><td><code>arcli exp metric EXP_ID --step N --json JSON</code></td><td>记录指标</td></tr>
+    <tr data-cmd="exp param"><td><code>arcli exp param EXP_ID --params JSON</code></td><td>更新参数</td></tr>
+    <tr data-cmd="exp finish"><td><code>arcli exp finish EXP_ID --status STATUS</code></td><td>标记完成</td></tr>
+    <tr data-cmd="db sync"><td><code>arcli db sync --mode auto|export|import</code></td><td>SQLite/JSON 同步</td></tr>
+    <tr data-cmd="db status"><td><code>arcli db status</code></td><td>查看同步状态</td></tr>
+    <tr data-cmd="log show"><td><code>arcli log show EXP_ID --tail N --follow</code></td><td>查看日志</td></tr>
+    <tr data-cmd="config get"><td><code>arcli config get KEY</code></td><td>读取配置</td></tr>
+    <tr data-cmd="config set"><td><code>arcli config set KEY VALUE</code></td><td>设置配置</td></tr>
+  </table>
+</section>
+
+<!-- Sync -->
+<section id="sync" class="reveal">
+  <h2>双轨持久化</h2>
+
+  <div class="card-grid cols-2">
+    <div class="card">
+      <span class="tag">SQLite</span>
+      <h4>.research/research.db</h4>
+      <p>运行时缓存。支持高效查询、原子操作、并发写入。</p>
+    </div>
+    <div class="card">
+      <span class="tag">JSON</span>
+      <h4>experiments/*/experiment.json</h4>
+      <p>版本控制事实来源。人类和 Agent 最终只需信任 JSON。</p>
+    </div>
+  </div>
+
+  <h3>同步流程</h3>
+  <pre><code>┌─────────────┐     export      ┌─────────────────┐
+│  SQLite     │ ───────────────→│ experiment.json │
+│ research.db │                 │ (版本控制事实源) │
+│  (运行时缓存) │ ←───────────────│                 │
+└─────────────┘     import      └─────────────────┘
+        ↑                              ↑
+        │    db sync --mode auto       │
+        │    按 updated_at 比较合并     │
+        └──────────────────────────────┘</code></pre>
+
+  <h3>使用场景</h3>
+  <ul>
+    <li><strong>实验后</strong>: <code>db sync --mode export</code> 将 SQLite 写入 JSON</li>
+    <li><strong>拉取后</strong>: <code>db sync --mode import</code> 将 JSON 读入 SQLite</li>
+    <li><strong>pre-commit</strong>: <code>db sync --mode auto</code> 自动比较合并</li>
+  </ul>
+</section>
+
+<!-- Stack -->
+<section id="stack" class="reveal">
+  <h2>Kozmosa Research Stack 定位</h2>
+
+  <div class="arch-stack">
+    <div class="arch-layer arch-layer-4">
+      <div class="arch-layer-label">Layer 4 — 垂直场景应用</div>
+      <div class="arch-layer-items">
+        <div class="arch-item">
+          <span class="arch-item-name">mmmdash</span>
+          <span class="arch-item-tech">Next.js</span>
+          <span class="arch-item-desc">数学建模竞赛协作</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="arch-connector-line"></div>
+      <div class="arch-connector-label">calls arcli (CLI / MCP)</div>
+    </div>
+
+    <div class="arch-layer arch-layer-3">
+      <div class="arch-layer-label">Layer 3 — 人机交互层</div>
+      <div class="arch-layer-items">
+        <div class="arch-item">
+          <span class="arch-item-name">AINRF</span>
+          <span class="arch-item-tech">React</span>
+          <span class="arch-item-desc">研究运维控制面板</span>
+        </div>
+        <div class="arch-item">
+          <span class="arch-item-name">documosa</span>
+          <span class="arch-item-tech">React</span>
+          <span class="arch-item-desc">文档协作界面</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="arch-connector-line"></div>
+      <div class="arch-connector-label">calls / integrates</div>
+    </div>
+
+    <div class="arch-layer arch-layer-2">
+      <div class="arch-layer-label">Layer 2 — 控制与调度层</div>
+      <div class="arch-layer-items">
+        <div class="arch-item">
+          <span class="arch-item-name">arcli</span>
+          <span class="arch-item-tech">Rust</span>
+          <span class="arch-item-desc">实验追踪基础设施 — init / new / run / sync</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-connector">
+      <div class="arch-connector-line"></div>
+      <div class="arch-connector-label">MCP / CLI</div>
+    </div>
+
+    <div class="arch-layer arch-layer-1">
+      <div class="arch-layer-label">Layer 1 — 执行运行时</div>
+      <div class="arch-layer-items">
+        <div class="arch-item">
+          <span class="arch-item-name">Local Agent</span>
+          <span class="arch-item-tech">Python</span>
+          <span class="arch-item-desc">本地 Shell / 实验执行</span>
+        </div>
+        <div class="arch-item">
+          <span class="arch-item-name">tmux / SSH</span>
+          <span class="arch-item-tech">Shell</span>
+          <span class="arch-item-desc">远程持久化会话</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>arcli 的核心设计原则</h3>
+  <ol>
+    <li><strong>实验的单一事实来源</strong> — 任何需要"运行实验并记录"的场景都通过 arcli</li>
+    <li><strong>Agent 原生</strong> — 所有命令支持 <code>--json</code>，输出机器可解析</li>
+    <li><strong>无状态 CLI</strong> — arcli 不维护常驻进程，状态存储在仓库文件中</li>
+    <li><strong>双轨持久化</strong> — SQLite 为运行时缓存，JSON 为版本控制事实来源</li>
+    <li><strong>严格契约</strong> — 实验创建时声明数据、命令、环境，绑定 git commit</li>
+  </ol>
+</section>
+
+<footer>
+  arcli v0.1.0 · Kozmosa Research Stack · 2026
+</footer>
+
+<script>
+  // Tree toggle
+  function toggleTree(node) {
+    const children = node.nextElementSibling;
+    if (children && children.classList.contains('tree-children')) {
+      children.classList.toggle('collapsed');
+      const toggle = node.querySelector('.tree-toggle');
+      toggle.textContent = children.classList.contains('collapsed') ? '+' : '-';
+    }
+  }
+
+  // Command filter
+  function filterCommands(query) {
+    const rows = document.querySelectorAll('#cmd-table tr[data-cmd]');
+    const q = query.toLowerCase();
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  }
+
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  reveals.forEach(el => observer.observe(el));
+
+  // Active nav link
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+
+  const onScroll = () => {
+    let current = '';
+    sections.forEach(section => {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= 100) current = section.id;
+    });
+    navLinks.forEach(link => {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+    });
+  };
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Animate state machine
+  const states = ['created', 'running', 'finished'];
+  let stateIdx = 0;
+  setInterval(() => {
+    document.querySelectorAll('.state-node').forEach(n => n.classList.remove('active'));
+    const id = 'state-' + states[stateIdx];
+    const node = document.getElementById(id);
+    if (node) node.classList.add('active');
+    stateIdx = (stateIdx + 1) % states.length;
+  }, 2000);
+</script>
+
+</body>
+</html>

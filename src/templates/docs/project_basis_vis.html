@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{PROJECT_NAME} — Project Basis v0.1.0</title>
+  <style>
+    :root {
+      --fg: #0a0a0a;
+      --fg-muted: #555;
+      --fg-faint: #999;
+      --bg: #fff;
+      --bg-subtle: #f7f7f7;
+      --border: #e0e0e0;
+      --accent: #0a0a0a;
+      --max-width: 720px;
+      --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+      --font-mono: "SF Mono", "SFMono-Regular", "Fira Code", "JetBrains Mono", Consolas, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 17px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Navigation */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+
+    nav .nav-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      height: 3.2rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    nav .nav-inner::-webkit-scrollbar { display: none; }
+
+    nav a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color 0.2s;
+    }
+
+    nav a:hover, nav a.active {
+      color: var(--fg);
+    }
+
+    nav .brand {
+      font-weight: 700;
+      color: var(--fg);
+      margin-right: auto;
+    }
+
+    /* Sections */
+    section {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    /* Hero */
+    #hero {
+      padding-top: 5rem;
+      padding-bottom: 5rem;
+      text-align: center;
+    }
+
+    .logo-mark {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 2rem;
+      position: relative;
+    }
+
+    .logo-mark::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 2px dashed var(--fg);
+      border-radius: 50%;
+      opacity: 0.3;
+    }
+
+    .logo-mark::after {
+      content: "";
+      position: absolute;
+      width: 36px;
+      height: 36px;
+      background: var(--fg);
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+
+    #hero .tagline {
+      font-size: 1.15rem;
+      color: var(--fg-muted);
+      max-width: 520px;
+      margin: 0 auto 2rem;
+    }
+
+    #hero .meta {
+      font-size: 0.85rem;
+      color: var(--fg-faint);
+    }
+
+    #hero .meta strong {
+      color: var(--fg);
+      font-weight: 600;
+    }
+
+    /* Typography */
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.5rem;
+      padding-top: 1rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.01em;
+    }
+
+    h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      color: var(--fg-muted);
+    }
+
+    p strong {
+      color: var(--fg);
+      font-weight: 600;
+    }
+
+    a {
+      color: var(--fg);
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+    }
+
+    a:hover {
+      text-decoration: none;
+    }
+
+    /* Code */
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--bg-subtle);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+    }
+
+    pre {
+      background: var(--bg-subtle);
+      padding: 1rem 1.25rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 1.5rem 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    /* Lists */
+    ul, ol {
+      margin: 1rem 0 1rem 1.25rem;
+      color: var(--fg-muted);
+    }
+
+    li {
+      margin-bottom: 0.4rem;
+    }
+
+    /* Tree */
+    .tree {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.8;
+      background: var(--bg-subtle);
+      padding: 1.25rem;
+      border-radius: 6px;
+      margin: 1.5rem 0;
+    }
+
+    .tree-node {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .tree-node:hover {
+      color: var(--fg);
+    }
+
+    .tree-toggle {
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+      margin-right: 0.25em;
+      color: var(--fg-faint);
+    }
+
+    .tree-children {
+      padding-left: 1.5em;
+      display: block;
+    }
+
+    .tree-children.collapsed {
+      display: none;
+    }
+
+    /* State Machine */
+    .state-machine {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 2rem 0;
+      padding: 1.5rem;
+      background: var(--bg-subtle);
+      border-radius: 8px;
+    }
+
+    .state-node {
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: var(--bg);
+    }
+
+    .state-node.active {
+      border-color: var(--fg);
+      background: var(--fg);
+      color: var(--bg);
+    }
+
+    .state-arrow {
+      color: var(--fg-faint);
+      font-size: 0.85rem;
+    }
+
+    /* Cards */
+    .card-grid {
+      display: grid;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    @media (min-width: 640px) {
+      .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--fg);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .card h4 {
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .card p {
+      margin-bottom: 0;
+      font-size: 0.9rem;
+    }
+
+    .card .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg-faint);
+      margin-bottom: 0.5rem;
+    }
+
+    /* Command table */
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 1.5rem 0;
+    }
+
+    .cmd-table th {
+      text-align: left;
+      font-weight: 600;
+      color: var(--fg);
+      border-bottom: 2px solid var(--border);
+      padding: 0.6rem 0.5rem;
+    }
+
+    .cmd-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 0.5rem;
+      color: var(--fg-muted);
+      vertical-align: top;
+    }
+
+    .cmd-table tr:hover td {
+      background: var(--bg-subtle);
+    }
+
+    .cmd-search {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      outline: none;
+    }
+
+    .cmd-search:focus {
+      border-color: var(--fg);
+    }
+
+    /* Phase timeline */
+    .phase {
+      margin: 2rem 0;
+      padding-left: 1.5rem;
+      border-left: 2px solid var(--border);
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .phase-num {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--fg-faint);
+    }
+
+    .phase-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    /* Scroll reveal */
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: var(--fg-faint);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      html { font-size: 16px; }
+      section { padding: 2.5rem 1rem; }
+      #hero { padding-top: 3rem; padding-bottom: 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#hero" class="brand">{PROJECT_NAME}</a>
+    <a href="#structure">结构</a>
+    <a href="#workflow">工作流</a>
+    <a href="#state-machine">状态机</a>
+    <a href="#commands">命令</a>
+    <a href="#sync">同步</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="logo-mark"></div>
+  <h1>{PROJECT_NAME}</h1>
+  <p class="tagline">{PROJECT_DESCRIPTION}</p>
+  <p class="meta"><strong>{STACK}</strong> · {RESEARCH_TYPE} · 初始化于 {INIT_DATE}</p>
+</section>
+
+<!-- Structure -->
+<section id="structure" class="reveal">
+  <h2>仓库结构</h2>
+  <p>点击目录可折叠/展开子目录。</p>
+  <div class="tree" id="dir-tree">
+    <div class="tree-node" onclick="toggleTree(this)">
+      <span class="tree-toggle">-</span>📁 {PROJECT_NAME}/
+    </div>
+    <div class="tree-children">
+      <div class="tree-node" onclick="toggleTree(this)">
+        <span class="tree-toggle">-</span>📁 data/
+      </div>
+      <div class="tree-children">
+        <div>📄 raw/ <span style="color:var(--fg-faint)">— 原始数据（只读）</span></div>
+        <div>📄 processed/ <span style="color:var(--fg-faint)">— 处理后数据</span></div>
+      </div>
+      <div class="tree-node" onclick="toggleTree(this)">
+        <span class="tree-toggle">-</span>📁 {EXPERIMENTS_DIR}/
+      </div>
+      <div class="tree-children">
+        <div>📄 run-001-{TIMESTAMP}/</div>
+        <div>📄 run-002-{TIMESTAMP}/</div>
+      </div>
+      <div>📁 src/ <span style="color:var(--fg-faint)">— 源代码</span></div>
+      <div>📁 tests/ <span style="color:var(--fg-faint)">— 测试代码</span></div>
+      <div>📁 artifacts/ <span style="color:var(--fg-faint)">— 共享制品</span></div>
+      <div>📁 docs/ <span style="color:var(--fg-faint)">— 文档</span></div>
+      <div class="tree-node" onclick="toggleTree(this)">
+        <span class="tree-toggle">-</span>📁 .research/
+      </div>
+      <div class="tree-children">
+        <div>📄 config.yaml <span style="color:var(--fg-faint)">— 项目配置</span></div>
+        <div>📄 research.db <span style="color:var(--fg-faint)">— SQLite 缓存（gitignore）</span></div>
+        <div>📁 templates/ <span style="color:var(--fg-faint)">— 实验模板</span></div>
+        <div>📁 hooks/ <span style="color:var(--fg-faint)">— Git hooks</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Workflow -->
+<section id="workflow" class="reveal">
+  <h2>工作流</h2>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">01</span>
+      <span class="phase-title">注册数据</span>
+    </div>
+    <p>将数据集注册为资产，计算 SHA256 校验和。</p>
+    <pre><code>arcli data register ./data/raw --name my-dataset</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">02</span>
+      <span class="phase-title">创建实验</span>
+    </div>
+    <p>声明数据、命令、环境，生成唯一实验 ID。</p>
+    <pre><code>arcli exp new --data my-dataset --cmd "python train.py"</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">03</span>
+      <span class="phase-title">执行实验</span>
+    </div>
+    <p>运行命令，自动捕获 stdout/stderr 到日志。</p>
+    <pre><code>arcli exp run run-001-{TIMESTAMP}</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">04</span>
+      <span class="phase-title">记录指标</span>
+    </div>
+    <p>按 step 记录结构化指标。</p>
+    <pre><code>arcli exp metric run-001-{TIMESTAMP} --step 1 --json '{"loss":0.5}'</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">05</span>
+      <span class="phase-title">同步归档</span>
+    </div>
+    <p>导出 SQLite 到 JSON，纳入版本控制。</p>
+    <pre><code>arcli db sync --mode export
+git add {EXPERIMENTS_DIR}/*/experiment.json</code></pre>
+  </div>
+</section>
+
+<!-- State Machine -->
+<section id="state-machine" class="reveal">
+  <h2>实验状态机</h2>
+  <p>实验在其生命周期中经历以下状态。</p>
+
+  <div class="state-machine">
+    <div class="state-node" id="state-created">created</div>
+    <span class="state-arrow">→</span>
+    <div class="state-node" id="state-running">running</div>
+    <span class="state-arrow">→</span>
+    <div class="state-node" id="state-finished">finished</div>
+  </div>
+
+  <div style="text-align:center; margin-top:1rem; font-size:0.85rem; color:var(--fg-faint)">
+    <div style="margin:0.5rem 0">running → <span style="color:var(--fg-muted)">exit(≠0)</span> → <strong>failed</strong></div>
+    <div style="margin:0.5rem 0">running → <span style="color:var(--fg-muted)">SIGTERM</span> → <strong>interrupted</strong> → resume → running</div>
+  </div>
+</section>
+
+<!-- Commands -->
+<section id="commands" class="reveal">
+  <h2>命令速查</h2>
+  <input type="text" class="cmd-search" placeholder="搜索命令..." oninput="filterCommands(this.value)">
+
+  <table class="cmd-table" id="cmd-table">
+    <tr><th>命令</th><th>说明</th></tr>
+    <tr data-cmd="project init"><td><code>arcli project init [PATH]</code></td><td>初始化研究仓库</td></tr>
+    <tr data-cmd="env status"><td><code>arcli env status</code></td><td>查看环境快照</td></tr>
+    <tr data-cmd="env check"><td><code>arcli env check --strict</code></td><td>严格检查工作区</td></tr>
+    <tr data-cmd="data register"><td><code>arcli data register PATH --name NAME</code></td><td>注册数据资产</td></tr>
+    <tr data-cmd="data list"><td><code>arcli data list</code></td><td>列出数据资产</td></tr>
+    <tr data-cmd="exp new"><td><code>arcli exp new --data NAME --cmd CMD</code></td><td>创建实验</td></tr>
+    <tr data-cmd="exp run"><td><code>arcli exp run EXP_ID</code></td><td>执行实验</td></tr>
+    <tr data-cmd="exp stop"><td><code>arcli exp stop EXP_ID</code></td><td>终止实验</td></tr>
+    <tr data-cmd="exp status"><td><code>arcli exp status [EXP_ID]</code></td><td>查看实验状态</td></tr>
+    <tr data-cmd="exp metric"><td><code>arcli exp metric EXP_ID --step N --json JSON</code></td><td>记录指标</td></tr>
+    <tr data-cmd="exp param"><td><code>arcli exp param EXP_ID --params JSON</code></td><td>更新参数</td></tr>
+    <tr data-cmd="exp finish"><td><code>arcli exp finish EXP_ID --status STATUS</code></td><td>标记完成</td></tr>
+    <tr data-cmd="db sync"><td><code>arcli db sync --mode auto|export|import</code></td><td>SQLite/JSON 同步</td></tr>
+    <tr data-cmd="db status"><td><code>arcli db status</code></td><td>查看同步状态</td></tr>
+    <tr data-cmd="log show"><td><code>arcli log show EXP_ID --tail N --follow</code></td><td>查看日志</td></tr>
+    <tr data-cmd="config get"><td><code>arcli config get KEY</code></td><td>读取配置</td></tr>
+    <tr data-cmd="config set"><td><code>arcli config set KEY VALUE</code></td><td>设置配置</td></tr>
+  </table>
+</section>
+
+<!-- Sync -->
+<section id="sync" class="reveal">
+  <h2>双轨持久化</h2>
+
+  <div class="card-grid cols-2">
+    <div class="card">
+      <span class="tag">SQLite</span>
+      <h4>.research/research.db</h4>
+      <p>运行时缓存。支持高效查询、原子操作、并发写入。</p>
+    </div>
+    <div class="card">
+      <span class="tag">JSON</span>
+      <h4>{EXPERIMENTS_DIR}/*/experiment.json</h4>
+      <p>版本控制事实来源。人类和 Agent 最终只需信任 JSON。</p>
+    </div>
+  </div>
+
+  <h3>同步流程</h3>
+  <pre><code>┌─────────────┐     export      ┌─────────────────┐
+│  SQLite     │ ───────────────→│ experiment.json │
+│ research.db │                 │ (版本控制事实源) │
+│  (运行时缓存) │ ←───────────────│                 │
+└─────────────┘     import      └─────────────────┘
+        ↑                              ↑
+        │    db sync --mode auto       │
+        │    按 updated_at 比较合并     │
+        └──────────────────────────────┘</code></pre>
+
+  <h3>使用场景</h3>
+  <ul>
+    <li><strong>实验后</strong>: <code>db sync --mode export</code> 将 SQLite 写入 JSON</li>
+    <li><strong>拉取后</strong>: <code>db sync --mode import</code> 将 JSON 读入 SQLite</li>
+    <li><strong>pre-commit</strong>: <code>db sync --mode auto</code> 自动比较合并</li>
+  </ul>
+</section>
+
+<footer>
+  Generated by arcli v0.1.0 · {PROJECT_NAME} · {INIT_DATE}
+</footer>
+
+<script>
+  // Tree toggle
+  function toggleTree(node) {
+    const children = node.nextElementSibling;
+    if (children && children.classList.contains('tree-children')) {
+      children.classList.toggle('collapsed');
+      const toggle = node.querySelector('.tree-toggle');
+      toggle.textContent = children.classList.contains('collapsed') ? '+' : '-';
+    }
+  }
+
+  // Command filter
+  function filterCommands(query) {
+    const rows = document.querySelectorAll('#cmd-table tr[data-cmd]');
+    const q = query.toLowerCase();
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  }
+
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  reveals.forEach(el => observer.observe(el));
+
+  // Active nav link
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+
+  const onScroll = () => {
+    let current = '';
+    sections.forEach(section => {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= 100) current = section.id;
+    });
+    navLinks.forEach(link => {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+    });
+  };
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Animate state machine
+  const states = ['created', 'running', 'finished'];
+  let stateIdx = 0;
+  setInterval(() => {
+    document.querySelectorAll('.state-node').forEach(n => n.classList.remove('active'));
+    const id = 'state-' + states[stateIdx];
+    const node = document.getElementById(id);
+    if (node) node.classList.add('active');
+    stateIdx = (stateIdx + 1) % states.length;
+  }, 2000);
+</script>
+
+</body>
+</html>

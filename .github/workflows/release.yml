@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: rcli
+  BINARY_NAME: arcli
 
 jobs:
   build:
@@ -57,7 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.asset.outputs.asset_name }}
-          path: target/${{ matrix.target }}/release/rcli${{ matrix.suffix }}
+          path: target/${{ matrix.target }}/release/arcli${{ matrix.suffix }}
 
   release:
     name: Create GitHub Release

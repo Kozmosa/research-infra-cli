@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::db::Database;
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
 pub fn register(
@@ -22,7 +22,7 @@ pub fn register(
     };
 
     if !abs_path.exists() {
-        return Err(RcliError::DataNotFound(path.to_string()));
+        return Err(ArcliError::DataNotFound(path.to_string()));
     }
 
     let checksum = match checksum {
@@ -42,7 +42,7 @@ pub fn register(
     let mut datasets = load_data_index(&index_path)?;
 
     if datasets.iter().any(|d| d.name == name) {
-        return Err(RcliError::DataAlreadyExists(name.to_string()));
+        return Err(ArcliError::DataAlreadyExists(name.to_string()));
     }
 
     let dataset = crate::db::Dataset {
@@ -77,7 +77,7 @@ pub fn info(repo: &Repository, name: &str) -> Result<crate::db::Dataset> {
     datasets
         .into_iter()
         .find(|d| d.name == name)
-        .ok_or_else(|| RcliError::DataNotFound(name.to_string()))
+        .ok_or_else(|| ArcliError::DataNotFound(name.to_string()))
 }
 
 pub fn update(
@@ -90,7 +90,7 @@ pub fn update(
     let idx = datasets
         .iter()
         .position(|d| d.name == name)
-        .ok_or_else(|| RcliError::DataNotFound(name.to_string()))?;
+        .ok_or_else(|| ArcliError::DataNotFound(name.to_string()))?;
 
     if let Some(path) = new_path {
         let abs_path = if Path::new(&path).is_relative() {
@@ -234,7 +234,7 @@ mod tests {
             Some("new desc".to_string()),
             None,
         );
-        assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
+        assert!(matches!(result, Err(ArcliError::DataAlreadyExists(_))));
 
         let datasets = list(&repo).unwrap();
         assert_eq!(datasets.len(), 1);
@@ -263,7 +263,7 @@ mod tests {
             Some("new desc".to_string()),
             None,
         );
-        assert!(matches!(result, Err(RcliError::DataAlreadyExists(_))));
+        assert!(matches!(result, Err(ArcliError::DataAlreadyExists(_))));
 
         // Verify SQLite cache matches YAML source (not the failed attempt)
         let db = Database::open(&repo.db_path()).unwrap();
@@ -299,7 +299,7 @@ mod tests {
     fn test_update_nonexistent_fails() {
         let (repo, _dir) = create_test_repo();
         let result = update(&repo, "missing", Some("data/new".to_string()), false);
-        assert!(matches!(result, Err(RcliError::DataNotFound(_))));
+        assert!(matches!(result, Err(ArcliError::DataNotFound(_))));
     }
 
     #[test]

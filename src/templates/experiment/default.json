@@ -1,0 +1,15 @@
+{
+  "id": "{EXP_ID}",
+  "status": "created",
+  "created_at": "{CREATED_AT}",
+  "commit_hash": "{COMMIT_HASH}",
+  "data_used": "{DATA_USED}",
+  "command": "{COMMAND}",
+  "params": {},
+  "metrics": [],
+  "notes": "{NOTES}",
+  "env": "{ENV}",
+  "start_time": null,
+  "end_time": null,
+  "updated_at": "{CREATED_AT}"
+}

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::error::RcliError;
+use crate::error::ArcliError;
 
 #[derive(Serialize)]
 struct ErrorOutput {
@@ -8,7 +8,7 @@ struct ErrorOutput {
     message: String,
 }
 
-pub fn print_result<T: Serialize>(result: Result<T, RcliError>, json_mode: bool) {
+pub fn print_result<T: Serialize>(result: Result<T, ArcliError>, json_mode: bool) {
     match result {
         Ok(value) => {
             if json_mode {
@@ -62,7 +62,7 @@ pub fn print_text(text: &str) {
     println!("{}", text);
 }
 
-pub fn print_error(e: &RcliError, json_mode: bool) {
+pub fn print_error(e: &ArcliError, json_mode: bool) {
     if json_mode {
         let err = ErrorOutput {
             error_code: e.error_code().to_string(),

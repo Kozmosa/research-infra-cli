@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use crate::config::Config;
 use crate::db::Database;
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
 #[derive(Serialize)]
@@ -68,12 +68,12 @@ pub fn check(repo: &Repository, strict: bool) -> Result<()> {
     if strict {
         let git_info = get_git_info(repo)?;
         if !git_info.is_clean {
-            return Err(RcliError::WorkspaceNotClean);
+            return Err(ArcliError::WorkspaceNotClean);
         }
 
         let hooks_dir = repo.research_dir().join("hooks");
         if !hooks_dir.exists() {
-            return Err(RcliError::ReadinessCheckFailed(
+            return Err(ArcliError::ReadinessCheckFailed(
                 ".research/hooks 目录不存在".to_string(),
             ));
         }
@@ -85,7 +85,7 @@ pub fn check(repo: &Repository, strict: bool) -> Result<()> {
         });
 
         if !has_any_hook {
-            return Err(RcliError::ReadinessCheckFailed(
+            return Err(ArcliError::ReadinessCheckFailed(
                 ".research/hooks 中没有任何 hook 文件".to_string(),
             ));
         }
@@ -191,7 +191,7 @@ mod tests {
         // Dirty workspace should fail
         fs::write(repo.root.join("dirty.txt"), "dirty").unwrap();
         let result = check(&repo, true);
-        assert!(matches!(result, Err(RcliError::WorkspaceNotClean)));
+        assert!(matches!(result, Err(ArcliError::WorkspaceNotClean)));
     }
 
     #[test]
@@ -210,7 +210,7 @@ mod tests {
         fs::remove_dir_all(repo.research_dir().join("hooks")).unwrap();
 
         let result = check(&repo, true);
-        assert!(matches!(result, Err(RcliError::ReadinessCheckFailed(_))));
+        assert!(matches!(result, Err(ArcliError::ReadinessCheckFailed(_))));
     }
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
         }
 
         let result = check(&repo, true);
-        assert!(matches!(result, Err(RcliError::ReadinessCheckFailed(_))));
+        assert!(matches!(result, Err(ArcliError::ReadinessCheckFailed(_))));
     }
 
     #[test]

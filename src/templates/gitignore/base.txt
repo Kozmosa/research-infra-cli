@@ -1,0 +1,8 @@
+# arcli internal data
+.research/*.db*
+.research/*.db-journal
+.research/*.db-wal
+.research/*.db-shm
+
+# large datasets (use DVC instead)
+# data/raw/large-datasets/

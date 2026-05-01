@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -82,9 +82,9 @@ impl Config {
                     self.extra
                         .get(parts[0])
                         .and_then(|v| v.as_str().map(|s| s.to_string()))
-                        .ok_or_else(|| RcliError::ConfigKeyNotFound(key.to_string()))
+                        .ok_or_else(|| ArcliError::ConfigKeyNotFound(key.to_string()))
                 } else {
-                    Err(RcliError::ConfigKeyNotFound(key.to_string()))
+                    Err(ArcliError::ConfigKeyNotFound(key.to_string()))
                 }
             }
         }
@@ -105,7 +105,7 @@ impl Config {
                         serde_yaml::Value::String(value.to_string()),
                     );
                 } else {
-                    return Err(RcliError::ConfigKeyNotFound(key.to_string()));
+                    return Err(ArcliError::ConfigKeyNotFound(key.to_string()));
                 }
             }
         }
@@ -136,7 +136,7 @@ mod tests {
     fn test_config_get_missing_key() {
         let config = Config::default();
         let result = config.get("nonexistent.key");
-        assert!(matches!(result, Err(RcliError::ConfigKeyNotFound(_))));
+        assert!(matches!(result, Err(ArcliError::ConfigKeyNotFound(_))));
     }
 
     #[test]

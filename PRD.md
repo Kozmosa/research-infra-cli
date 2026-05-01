@@ -1,4 +1,6 @@
-# rcli 产品需求文档 (PRD)
+# arcli — Agentic Research Command Line Infrastructure
+
+**产品需求文档 (PRD)**
 
 **版本**: 0.1  
 **状态**: 草案  
@@ -9,9 +11,9 @@
 
 ## 1. 概述
 
-`rcli` 是一套用 Rust 编写的命令行工具，旨在为 AI agent 提供一个**预结构化、可复现、低熵的研究工作环境**。它定义了科学的仓库目录规范，管理实验的完整生命周期，并将所有关键环境信息（代码状态、数据资产、实验记录）转化为确定的、可查询的 ground truth，从而消除 agent 的“即兴探索”行为，减少 token 消耗与幻觉，并保证人类与 agent 的无缝协作。
+`arcli` 是一套用 Rust 编写的命令行工具，旨在为 AI agent 提供一个**预结构化、可复现、低熵的研究工作环境**。它定义了科学的仓库目录规范，管理实验的完整生命周期，并将所有关键环境信息（代码状态、数据资产、实验记录）转化为确定的、可查询的 ground truth，从而消除 agent 的“即兴探索”行为，减少 token 消耗与幻觉，并保证人类与 agent 的无缝协作。
 
-`rcli` 是整个研究基础设施（`research-infra`）的核心组件，它与一个固定的项目结构、一个本地 SQLite 缓存数据库、以及导出为 JSON 的实验记录文件协同工作。上游的 MCP server 与 Skill 层将其封装为对 agent 友好的工具。
+`arcli` 是整个研究基础设施（`research-infra`）的核心组件，它与一个固定的项目结构、一个本地 SQLite 缓存数据库、以及导出为 JSON 的实验记录文件协同工作。上游的 MCP server 与 Skill 层将其封装为对 agent 友好的工具。
 
 ---
 
@@ -24,7 +26,7 @@
 - **协作困难**: 人类无法可靠地跟踪 agent 的行为，难以干预或审计。
 - **缺乏 grounding**: agent 不知道项目已经有什么数据、哪些实验已完成、当前代码处于哪个版本。
 
-`rcli` 通过将环境信息“注入” agent 的初始上下文，并为所有敏感操作提供严格的 CLI 界面，直接回应以上问题。
+`arcli` 通过将环境信息“注入” agent 的初始上下文，并为所有敏感操作提供严格的 CLI 界面，直接回应以上问题。
 
 ---
 
@@ -33,8 +35,8 @@
 1. **一切皆为文件**: SQLite 数据库作为运行时缓存，但其内容通过 `experiment.json` 物化到文件系统，纳入版本控制。人类和 agent 最终只需信任 JSON 文件。
 2. **确定性接口**: 所有 ground truth 的获取（git 状态、数据列表、实验列表）均通过不可变的 CLI 命令实现，消除 agent 自行执行易出错的 shell 命令的需求。
 3. **严格的实验契约**: 采用“实验申请表”模式，agent 必须显式提供实验所需数据、命令、环境等参数，CLI 负责验证工作区净空、生成唯一 ID、锁定代码版本。
-4. **无状态 CLI**: `rcli` 本身不维护常驻进程，每次调用即结束。所有状态存储在仓库内的文件（SQLite、JSON、YAML）中。
-5. **分层解耦**: `rcli` 是底层原子操作集；MCP server / Skill 是上层封装，负责上下文注入、权限校验与流程编排。CLI 与 MCP 为独立的二进制文件。
+4. **无状态 CLI**: `arcli` 本身不维护常驻进程，每次调用即结束。所有状态存储在仓库内的文件（SQLite、JSON、YAML）中。
+5. **分层解耦**: `arcli` 是底层原子操作集；MCP server / Skill 是上层封装，负责上下文注入、权限校验与流程编排。CLI 与 MCP 为独立的二进制文件。
 
 ---
 
@@ -60,7 +62,7 @@
 ├── tests/                   # 测试代码
 ├── artifacts/               # 项目级共享制品
 ├── docs/                    # 文档
-└── .research/               # rcli 内部数据（部分纳入版本管理）
+└── .research/               # arcli 内部数据（部分纳入版本管理）
     ├── config.yaml          # 项目配置
     ├── research.db          # SQLite 运行时缓存（.gitignore 忽略）
     ├── templates/           # 实验模板
@@ -97,7 +99,7 @@ created ──→ running ──→ finished
 
 ---
 
-## 5. CLI 详细规约 (rcli)
+## 5. CLI 详细规约 (arcli)
 
 ### 5.1 全局约定
 
@@ -109,29 +111,29 @@ created ──→ running ──→ finished
 ### 5.2 命令总览
 
 ```
-rcli project init [PATH] [options]         # 创建项目脚手架
-rcli env status [options]                  # 获取环境快照
-rcli env check [options]                   # 检查工作区是否就绪
-rcli data register <PATH> [options]        # 注册数据资产
-rcli data list [options]                   # 列出数据资产
-rcli data info <NAME> [options]            # 查看数据详情
-rcli data update <NAME> [options]          # 更新数据信息
-rcli exp new [options]                     # 提交实验申请
-rcli exp run <EXP_ID> [--] [ARGS...]       # 包装执行实验
-rcli exp stop <EXP_ID>                     # 终止实验
-rcli exp status [EXP_ID] [options]         # 查看实验状态
-rcli exp metric <EXP_ID> [options]         # 记录指标
-rcli exp param <EXP_ID> [options]          # 记录/更新参数
-rcli exp finish <EXP_ID> [options]         # 手动标记实验结束
-rcli exp export <EXP_ID> [options]         # 导出实验 JSON
-rcli exp list [options]                    # 列出实验摘要
-rcli db sync [options]                     # SQLite 与 JSON 同步
-rcli db export-all [options]              # 全量导出 JSON
-rcli db import [options]                   # 从 JSON 导入
-rcli db status [options]                   # 显示数据库与 JSON 差异
-rcli log show <EXP_ID> [options]           # 查看实验日志
-rcli config get <KEY>                      # 读取配置项
-rcli config set <KEY> <VALUE>             # 设置配置项
+arcli project init [PATH] [options]         # 创建项目脚手架
+arcli env status [options]                  # 获取环境快照
+arcli env check [options]                   # 检查工作区是否就绪
+arcli data register <PATH> [options]        # 注册数据资产
+arcli data list [options]                   # 列出数据资产
+arcli data info <NAME> [options]            # 查看数据详情
+arcli data update <NAME> [options]          # 更新数据信息
+arcli exp new [options]                     # 提交实验申请
+arcli exp run <EXP_ID> [--] [ARGS...]       # 包装执行实验
+arcli exp stop <EXP_ID>                     # 终止实验
+arcli exp status [EXP_ID] [options]         # 查看实验状态
+arcli exp metric <EXP_ID> [options]         # 记录指标
+arcli exp param <EXP_ID> [options]          # 记录/更新参数
+arcli exp finish <EXP_ID> [options]         # 手动标记实验结束
+arcli exp export <EXP_ID> [options]         # 导出实验 JSON
+arcli exp list [options]                    # 列出实验摘要
+arcli db sync [options]                     # SQLite 与 JSON 同步
+arcli db export-all [options]              # 全量导出 JSON
+arcli db import [options]                   # 从 JSON 导入
+arcli db status [options]                   # 显示数据库与 JSON 差异
+arcli log show <EXP_ID> [options]           # 查看实验日志
+arcli config get <KEY>                      # 读取配置项
+arcli config set <KEY> <VALUE>             # 设置配置项
 ```
 
 ### 5.3 `project` 命令组
@@ -140,7 +142,7 @@ rcli config set <KEY> <VALUE>             # 设置配置项
 
 初始化一个新的研究仓库，创建完整目录结构和 Git 仓库。
 
-**用法**: `rcli project init [PATH] [--name <NAME>] [--force] [--exp-dir <DIRNAME>]`
+**用法**: `arcli project init [PATH] [--name <NAME>] [--force] [--exp-dir <DIRNAME>]`
 
 - `PATH`: 目标目录，默认当前目录。
 - `--name`: 项目名称，写入 `README.md` 和配置。
@@ -158,7 +160,7 @@ rcli config set <KEY> <VALUE>             # 设置配置项
 
 **示例**:
 ```bash
-rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
+arcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 ```
 
 ---
@@ -169,7 +171,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 获取当前仓库的完整环境快照，作为 agent 的初始上下文。
 
-**用法**: `rcli env status [--json]`
+**用法**: `arcli env status [--json]`
 
 **JSON 输出结构**:
 ```json
@@ -193,7 +195,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 用于执行策略前的检查，如“工作区必须净空”。
 
-**用法**: `rcli env check [--strict]`
+**用法**: `arcli env check [--strict]`
 
 - `--strict`: 检查工作区是否干净（`git status --porcelain` 为空）、必要的钩子是否就绪等。
 - 若检查不通过，退出码非零，并返回具体原因。
@@ -206,7 +208,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 将目录注册为正式的数据资产，并记录校验和与添加日期。
 
-**用法**: `rcli data register <PATH> --name <NAME> [--desc <TEXT>] [--checksum <SHA256>]`
+**用法**: `arcli data register <PATH> --name <NAME> [--desc <TEXT>] [--checksum <SHA256>]`
 
 - `PATH`: 数据目录的路径（相对于仓库根）。
 - `--name`: 该资产的唯一标识符（如 `imdb-v1`）。
@@ -218,7 +220,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 列出所有已注册数据资产。
 
-**用法**: `rcli data list [--json]`
+**用法**: `arcli data list [--json]`
 
 输出名称列表，agent 可直接拿去填写 `--data` 参数。
 
@@ -226,7 +228,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 查看数据资产的详细信息。
 
-**用法**: `rcli data info <NAME> [--json]`
+**用法**: `arcli data info <NAME> [--json]`
 
 返回 JSON 包含名称、路径、添加日期、校验和、描述等。
 
@@ -234,7 +236,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 更新数据的位置或手动触发重新计算校验和。
 
-**用法**: `rcli data update <NAME> [--path <NEW_PATH>] [--recompute-checksum]`
+**用法**: `arcli data update <NAME> [--path <NEW_PATH>] [--recompute-checksum]`
 
 ---
 
@@ -246,7 +248,7 @@ rcli project init ./my-ml-project --name "Image Classification" --exp-dir exps
 
 **用法**: 
 ```
-rcli exp new --data <DATA_NAME> --cmd <COMMAND> 
+arcli exp new --data <DATA_NAME> --cmd <COMMAND> 
              [--label <SHORT_LABEL>] [--params <JSON>] 
              [--notes <TEXT>] [--env <ENV_NAME>] [--template <TEMPLATE>]
              [--json]
@@ -280,7 +282,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 使用包装器模式执行实验。
 
-**用法**: `rcli exp run <EXP_ID> [--] [EXTRA_ARGS...]`
+**用法**: `arcli exp run <EXP_ID> [--] [EXTRA_ARGS...]`
 
 - `EXTRA_ARGS`: 将追加到 `exp new` 中保存的命令后面。
 
@@ -293,7 +295,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 6. 记录结束时间：
    - 退出码 0 → 状态 `finished`
    - 退出码 非0 → 状态 `failed`
-7. 如果 rcli 自身被信号中断（SIGINT/SIGTERM），将信号转发给子进程，并将状态置为 `interrupted`。子进程异常终止也会导致 `interrupted`。
+7. 如果 arcli 自身被信号中断（SIGINT/SIGTERM），将信号转发给子进程，并将状态置为 `interrupted`。子进程异常终止也会导致 `interrupted`。
 8. 更新数据库和 JSON，输出最后几行日志和退出码。
 
 **注意**: `exp run` 会阻塞直到进程结束，MCP 层可将其作为长时间工具调用处理。
@@ -302,7 +304,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 终止运行中的实验。
 
-**用法**: `rcli exp stop <EXP_ID> [--signal <SIGNAL>]`
+**用法**: `arcli exp stop <EXP_ID> [--signal <SIGNAL>]`
 
 - 默认发送 SIGTERM，可指定 SIGKILL。要求状态为 `running`。
 
@@ -310,7 +312,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 查看单个或所有实验的状态。
 
-**用法**: `rcli exp status [EXP_ID] [--json]`
+**用法**: `arcli exp status [EXP_ID] [--json]`
 
 若省略 `EXP_ID`，返回所有实验的摘要（与 `exp list` 类似但包含更详细的当前状态）。
 
@@ -319,8 +321,8 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 记录结构化指标（如 loss、accuracy）。
 
 **用法**:
-- `rcli exp metric <EXP_ID> --step <N> --json '{"loss": 0.5}'`
-- `rcli exp metric <EXP_ID> --step <N> --key loss --val 0.5 --key acc --val 0.9`
+- `arcli exp metric <EXP_ID> --step <N> --json '{"loss": 0.5}'`
+- `arcli exp metric <EXP_ID> --step <N> --key loss --val 0.5 --key acc --val 0.9`
 
 指标追加到 SQLite `metrics_history` 表，并异步影响下一次 JSON 导出。允许对同 step 同指标覆盖（更新）。
 
@@ -328,25 +330,25 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 在实验运行中或结束后补录参数。与 `exp new` 时的 `--params` 合并，有同名键则覆盖。
 
-**用法**: `rcli exp param <EXP_ID> --json '{"lr": 0.001}'`
+**用法**: `arcli exp param <EXP_ID> --json '{"lr": 0.001}'`
 
 #### `exp finish`
 
 用于未通过 `exp run` 管理的手动实验（人类直接运行），或对 `interrupted` 实验主动标记为失败。
 
-**用法**: `rcli exp finish <EXP_ID> --status <finished|failed> [--message <TEXT>]`
+**用法**: `arcli exp finish <EXP_ID> --status <finished|failed> [--message <TEXT>]`
 
 #### `exp export`
 
 强制将 SQLite 中的实验数据导出到 `<exp-dir>/<ID>/experiment.json`。通常由同步钩子调用。
 
-**用法**: `rcli exp export <EXP_ID> [--output <PATH>]`
+**用法**: `arcli exp export <EXP_ID> [--output <PATH>]`
 
 #### `exp list`
 
 列出所有实验的摘要信息，支持过滤。
 
-**用法**: `rcli exp list [--status <STATUS>] [--since <DATE>] [--json]`
+**用法**: `arcli exp list [--status <STATUS>] [--since <DATE>] [--json]`
 
 ---
 
@@ -356,7 +358,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 执行 SQLite 与 JSON 的双向同步。
 
-**用法**: `rcli db sync [--mode export|import|auto]`
+**用法**: `arcli db sync [--mode export|import|auto]`
 
 - `export`: 将所有 SQLite 记录导出并覆盖对应实验的 JSON 文件。
 - `import`: 扫描所有 `experiment.json`，将更新的内容写回 SQLite。
@@ -368,19 +370,19 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 将所有实验从 SQLite 导出到一系列 JSON 文件，用于团队共享或备份。
 
-**用法**: `rcli db export-all [--out-dir <DIR>]`
+**用法**: `arcli db export-all [--out-dir <DIR>]`
 
 #### `db import`
 
 从指定的 `experiment.json` 或一个包含多个 JSON 的目录导入到 SQLite。仅对不存在或更新的实验执行插入/更新。
 
-**用法**: `rcli db import --from <PATH>`
+**用法**: `arcli db import --from <PATH>`
 
 #### `db status`
 
 显示数据库与实验目录 JSON 之间的同步状态（哪些实验需要更新，哪个方向）。
 
-**用法**: `rcli db status [--json]`
+**用法**: `arcli db status [--json]`
 
 ---
 
@@ -390,7 +392,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 显示实验的运行日志。
 
-**用法**: `rcli log show <EXP_ID> [--tail N] [--follow]`
+**用法**: `arcli log show <EXP_ID> [--tail N] [--follow]`
 
 - `--tail N`: 显示最后 N 行。
 - `--follow`: 持续输出新内容（类似 `tail -f`），用于 streaming。
@@ -403,13 +405,13 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 
 读取 `.research/config.yaml` 中的某个值。
 
-**用法**: `rcli config get <KEY>`
+**用法**: `arcli config get <KEY>`
 
 #### `config set`
 
 设置 `.research/config.yaml` 中的某个值。
 
-**用法**: `rcli config set <KEY> <VALUE>`
+**用法**: `arcli config set <KEY> <VALUE>`
 
 支持嵌套键，如 `templates.dir`。
 
@@ -421,7 +423,7 @@ rcli exp new --data <DATA_NAME> --cmd <COMMAND>
 - **SQLite 并发**: 数据库以 WAL 模式打开，允许多读并发。写操作（插入指标、更新状态）串行化，但对于典型的实验日志写入频率（秒级）完全足够。若未来有高频写入需求，可通过内存缓冲批量写入。
 - **实验 ID 唯一性**: 由于 `short_id` 全局唯一且时间戳以分钟为单位，完全避免了 ID 冲突。CLI 绝不信任 agent 传递的任何 ID 前缀，始终由系统生成。
 - **工作区净空保证**: `exp new` 强制依赖 `env check --strict`，防止在脏工作区上创建实验。这不需要文件锁，因为 git status 本身是即时快照。若极端并发下两个进程同时检查并通过，然后一个进程 commit 后另一个进程才创建实验，则后者的 commit hash 将是最新的。这是可接受的：实验记录将绑定它被创建时的 commit，不会是脏的。
-- **进程信号与状态**: `exp run` 维持对子进程的引用，确保在 rcli 被终止时能更新实验状态，避免僵尸实验。
+- **进程信号与状态**: `exp run` 维持对子进程的引用，确保在 arcli 被终止时能更新实验状态，避免僵尸实验。
 
 ---
 
@@ -461,4 +463,4 @@ experiments/run-010-..._hparam-search/
 
 ---
 
-**文档维护**: 本 PRD 将随 `rcli` 的实现和反馈持续迭代。下一步：根据此 PRD 编写 Rust 代码结构设计，并定义 MCP 工具映射 schema。
+**文档维护**: 本 PRD 将随 `arcli` 的实现和反馈持续迭代。下一步：根据此 PRD 编写 Rust 代码结构设计，并定义 MCP 工具映射 schema。

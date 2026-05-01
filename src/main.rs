@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use rcli::cli::{
+use arcli::cli::{
     Cli, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands, LogCommands,
     ProjectCommands,
 };
-use rcli::commands::{config, data, db, env, exp, log, project};
-use rcli::error::RcliError;
-use rcli::output;
-use rcli::repo::Repository;
+use arcli::commands::{config, data, db, env, exp, log, project};
+use arcli::error::ArcliError;
+use arcli::output;
+use arcli::repo::Repository;
 
 fn main() {
     let cli = Cli::parse();
@@ -30,21 +30,32 @@ fn main() {
     }
 }
 
-fn get_repo(repo_override: Option<&str>) -> Result<Repository, RcliError> {
+fn get_repo(repo_override: Option<&str>) -> Result<Repository, ArcliError> {
     let start = repo_override.map(PathBuf::from);
     let start_ref = start.as_deref();
     Repository::discover(start_ref)
 }
 
-fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), RcliError> {
+fn handle_project(cmd: &ProjectCommands, json_mode: bool) -> Result<(), ArcliError> {
     match cmd {
         ProjectCommands::Init {
             path,
             name,
             force,
             exp_dir,
+            research_type,
+            stack,
+            zh,
         } => {
-            let created = project::init(path.clone(), name.clone(), *force, exp_dir.clone())?;
+            let created = project::init(
+                path.clone(),
+                name.clone(),
+                *force,
+                exp_dir.clone(),
+                research_type.clone(),
+                stack.clone(),
+                *zh,
+            )?;
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&created)?);
             } else {
@@ -62,7 +73,7 @@ fn handle_env(
     cmd: &EnvCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         EnvCommands::Status => {
@@ -112,7 +123,7 @@ fn handle_data(
     cmd: &DataCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         DataCommands::Register {
@@ -182,7 +193,7 @@ fn handle_exp(
     cmd: &ExpCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         ExpCommands::New {
@@ -334,7 +345,7 @@ fn handle_db(
     cmd: &DbCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         DbCommands::Sync { mode } => {
@@ -389,7 +400,7 @@ fn handle_log(
     cmd: &LogCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         LogCommands::Show {
@@ -400,7 +411,7 @@ fn handle_log(
             if json_mode && !follow {
                 let log_path = repo.exp_log_path(exp_id);
                 if !log_path.exists() {
-                    return Err(RcliError::Other(format!(
+                    return Err(ArcliError::Other(format!(
                         "实验 '{}' 的日志文件不存在",
                         exp_id
                     )));
@@ -430,7 +441,7 @@ fn handle_config(
     cmd: &ConfigCommands,
     repo_override: Option<&str>,
     json_mode: bool,
-) -> Result<(), RcliError> {
+) -> Result<(), ArcliError> {
     let repo = get_repo(repo_override)?;
     match cmd {
         ConfigCommands::Get { key } => {

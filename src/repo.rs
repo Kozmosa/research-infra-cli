@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 
 pub struct Repository {
     pub root: PathBuf,
@@ -12,7 +12,7 @@ impl Repository {
     pub fn discover(start_dir: Option<&Path>) -> Result<Self> {
         let start = match start_dir {
             Some(p) => p.to_path_buf(),
-            None => env::current_dir().map_err(RcliError::Io)?,
+            None => env::current_dir().map_err(ArcliError::Io)?,
         };
 
         let mut current = start.as_path();
@@ -30,7 +30,7 @@ impl Repository {
             }
         }
 
-        Err(RcliError::RepoNotFound)
+        Err(ArcliError::RepoNotFound)
     }
 
     pub fn discover_or_current(start_dir: Option<&Path>) -> Self {

@@ -1,0 +1,4 @@
+project_name: "{PROJECT_NAME}"
+experiments_dir: "{EXPERIMENTS_DIR}"
+templates_dir: ".research/templates"
+hooks_dir: ".research/hooks"

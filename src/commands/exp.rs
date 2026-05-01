@@ -3,7 +3,7 @@ use std::fs;
 use crate::commands::{data, env};
 use crate::config::Config;
 use crate::db::Database;
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
 pub fn new(
@@ -19,10 +19,10 @@ pub fn new(
 ) -> Result<(String, String)> {
     if !manual {
         if data_name.is_none() {
-            return Err(RcliError::MissingRequiredArg("--data".to_string()));
+            return Err(ArcliError::MissingRequiredArg("--data".to_string()));
         }
         if cmd.is_none() {
-            return Err(RcliError::MissingRequiredArg("--cmd".to_string()));
+            return Err(ArcliError::MissingRequiredArg("--cmd".to_string()));
         }
     }
 
@@ -34,7 +34,7 @@ pub fn new(
     if !manual {
         let datasets = data::load_data_index(&repo.data_index_path())?;
         if !datasets.iter().any(|d| d.name == data_name) {
-            return Err(RcliError::DataNotFound(data_name.clone()));
+            return Err(ArcliError::DataNotFound(data_name.clone()));
         }
     }
 
@@ -127,11 +127,11 @@ pub fn run(repo: &Repository, exp_id: &str, extra_args: &[String]) -> Result<i32
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     if exp.status != "created" && exp.status != "interrupted" {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 当前状态为 '{}'，无法运行",
             exp_id, exp.status
         )));
@@ -264,11 +264,11 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     if exp.status != "running" {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 当前状态为 '{}'，不在运行中",
             exp_id, exp.status
         )));
@@ -276,7 +276,7 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
 
     let pid_path = repo.exp_dir(exp_id).join("pid");
     if !pid_path.exists() {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 的 PID 文件不存在，无法终止",
             exp_id
         )));
@@ -284,7 +284,7 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
 
     let pid_str = fs::read_to_string(&pid_path)?;
     let pid = pid_str.trim().parse::<i32>().map_err(|_| {
-        RcliError::Other(format!(
+        ArcliError::Other(format!(
             "实验 '{}' 的 PID 文件内容无效: '{}'",
             exp_id,
             pid_str.trim()
@@ -297,7 +297,7 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
             "SIGTERM" => libc::SIGTERM,
             "SIGKILL" => libc::SIGKILL,
             _ => {
-                return Err(RcliError::InvalidStatus(format!(
+                return Err(ArcliError::InvalidStatus(format!(
                     "无效信号 '{}', 仅支持 SIGTERM 和 SIGKILL",
                     signal
                 )));
@@ -307,7 +307,7 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
         let ret = unsafe { libc::kill(pid, sig) };
         if ret != 0 {
             let err = std::io::Error::last_os_error();
-            return Err(RcliError::Other(format!(
+            return Err(ArcliError::Other(format!(
                 "向实验 '{}' 的进程 {} 发送信号失败: {}",
                 exp_id, pid, err
             )));
@@ -318,10 +318,10 @@ pub fn stop(repo: &Repository, exp_id: &str, signal: &str) -> Result<()> {
         let output = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .output()
-            .map_err(|e| RcliError::Other(format!("终止进程失败: {}", e)))?;
+            .map_err(|e| ArcliError::Other(format!("终止进程失败: {}", e)))?;
         if !output.status.success() {
             let msg = String::from_utf8_lossy(&output.stderr);
-            return Err(RcliError::Other(format!(
+            return Err(ArcliError::Other(format!(
                 "向实验 '{}' 的进程 {} 发送终止信号失败: {}",
                 exp_id, pid, msg
             )));
@@ -342,7 +342,7 @@ pub fn status(repo: &Repository, exp_id: Option<&str>) -> Result<serde_json::Val
         let exp = db.get_experiment(id)?;
         match exp {
             Some(e) => Ok(serde_json::to_value(e)?),
-            None => Err(RcliError::DataNotFound(id.to_string())),
+            None => Err(ArcliError::DataNotFound(id.to_string())),
         }
     } else {
         let exps = db.list_experiments(None, None)?;
@@ -364,7 +364,7 @@ pub fn export(repo: &Repository, exp_id: &str, output: Option<&str>) -> Result<S
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     let json_value = serde_json::to_value(&exp)?;
@@ -395,7 +395,7 @@ pub fn metric(
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     if exp.status != "running"
@@ -403,7 +403,7 @@ pub fn metric(
         && exp.status != "finished"
         && exp.status != "failed"
     {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 当前状态为 '{}'，无法记录指标",
             exp_id, exp.status
         )));
@@ -435,7 +435,7 @@ pub fn metric(
     }
 
     if metrics.is_empty() {
-        return Err(RcliError::Other("未提供任何指标".to_string()));
+        return Err(ArcliError::Other("未提供任何指标".to_string()));
     }
 
     for (key, value) in metrics {
@@ -450,13 +450,13 @@ pub fn param(repo: &Repository, exp_id: &str, json_params: &str) -> Result<()> {
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     let new_params: serde_json::Value = serde_json::from_str(json_params)?;
     let new_obj = match new_params.as_object() {
         Some(o) => o.clone(),
-        None => return Err(RcliError::Other("参数必须是 JSON 对象".to_string())),
+        None => return Err(ArcliError::Other("参数必须是 JSON 对象".to_string())),
     };
 
     let mut merged = match exp.params {
@@ -494,7 +494,7 @@ pub fn param(repo: &Repository, exp_id: &str, json_params: &str) -> Result<()> {
 
 pub fn finish(repo: &Repository, exp_id: &str, status: &str, message: Option<&str>) -> Result<()> {
     if status != "finished" && status != "failed" {
-        return Err(RcliError::InvalidStatus(format!(
+        return Err(ArcliError::InvalidStatus(format!(
             "finish 命令只接受 'finished' 或 'failed' 状态，收到 '{}'",
             status
         )));
@@ -504,11 +504,11 @@ pub fn finish(repo: &Repository, exp_id: &str, status: &str, message: Option<&st
 
     let exp = match db.get_experiment(exp_id)? {
         Some(e) => e,
-        None => return Err(RcliError::DataNotFound(exp_id.to_string())),
+        None => return Err(ArcliError::DataNotFound(exp_id.to_string())),
     };
 
     if exp.status == "finished" || exp.status == "failed" {
-        return Err(RcliError::Other(format!(
+        return Err(ArcliError::Other(format!(
             "实验 '{}' 已处于 '{}' 状态，无法再次标记",
             exp_id, exp.status
         )));
@@ -768,7 +768,7 @@ mod tests {
         let (repo, _dir) = create_test_repo();
 
         let result = new(&repo, None, None, false, None, None, None, None, None);
-        assert!(matches!(result, Err(RcliError::MissingRequiredArg(_))));
+        assert!(matches!(result, Err(ArcliError::MissingRequiredArg(_))));
     }
 
     #[test]
@@ -786,7 +786,7 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(result, Err(RcliError::DataNotFound(_))));
+        assert!(matches!(result, Err(ArcliError::DataNotFound(_))));
     }
 
     #[test]
@@ -819,7 +819,7 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(result, Err(RcliError::WorkspaceNotClean)));
+        assert!(matches!(result, Err(ArcliError::WorkspaceNotClean)));
     }
 
     #[test]
@@ -985,7 +985,7 @@ mod tests {
         create_test_experiment(&repo, "exp-004", "echo hello");
 
         let result = stop(&repo, "exp-004", "SIGTERM");
-        assert!(matches!(result, Err(RcliError::Other(_))));
+        assert!(matches!(result, Err(ArcliError::Other(_))));
     }
 
     #[test]
@@ -1059,10 +1059,10 @@ mod tests {
         fs::write(repo.exp_dir("exp-009").join("pid"), pid.to_string()).unwrap();
 
         let result = stop(&repo, "exp-009", "SIGINT");
-        assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
+        assert!(matches!(result, Err(ArcliError::InvalidStatus(_))));
 
         let result = stop(&repo, "exp-009", "INVALID");
-        assert!(matches!(result, Err(RcliError::InvalidStatus(_))));
+        assert!(matches!(result, Err(ArcliError::InvalidStatus(_))));
 
         // 清理子进程
         unsafe {

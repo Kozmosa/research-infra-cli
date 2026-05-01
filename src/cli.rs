@@ -1,7 +1,7 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "rcli")]
+#[command(name = "arcli")]
 #[command(about = "Research CLI - 为 AI agent 和人类研究员提供预结构化、可复现的研究工作环境")]
 #[command(version = "0.1.0")]
 pub struct Cli {
@@ -39,6 +39,22 @@ pub enum Commands {
     Config(ConfigCommands),
 }
 
+#[derive(Clone, ValueEnum)]
+pub enum ResearchType {
+    Ml,
+    Data,
+    Math,
+    Generic,
+}
+
+#[derive(Clone, ValueEnum)]
+pub enum TechStack {
+    Python,
+    Rust,
+    Julia,
+    Go,
+}
+
 #[derive(Subcommand)]
 pub enum ProjectCommands {
     Init {
@@ -53,6 +69,15 @@ pub enum ProjectCommands {
 
         #[arg(long, default_value = "experiments", help = "实验目录的名称")]
         exp_dir: String,
+
+        #[arg(long, value_enum, help = "研究类型")]
+        research_type: Option<ResearchType>,
+
+        #[arg(long, value_enum, help = "技术栈")]
+        stack: Option<TechStack>,
+
+        #[arg(long, help = "生成中文 README")]
+        zh: bool,
     },
 }
 

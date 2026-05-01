@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::db::Database;
-use crate::error::{RcliError, Result};
+use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
 pub fn sync(repo: &Repository, mode: &str) -> Result<()> {
@@ -10,7 +10,7 @@ pub fn sync(repo: &Repository, mode: &str) -> Result<()> {
         "export" => sync_export(repo),
         "import" => sync_import(repo),
         "auto" => sync_auto(repo),
-        _ => Err(RcliError::InvalidStatus(format!("未知同步模式: {}", mode))),
+        _ => Err(ArcliError::InvalidStatus(format!("未知同步模式: {}", mode))),
     }
 }
 
@@ -238,7 +238,7 @@ fn sync_auto(repo: &Repository) -> Result<()> {
     }
 
     if !conflicts.is_empty() {
-        return Err(RcliError::SyncConflict(conflicts));
+        return Err(ArcliError::SyncConflict(conflicts));
     }
 
     Ok(())
@@ -567,7 +567,7 @@ mod tests {
         .unwrap();
 
         let result = sync_auto(&repo);
-        assert!(matches!(result, Err(RcliError::SyncConflict(_))));
+        assert!(matches!(result, Err(ArcliError::SyncConflict(_))));
     }
 
     #[test]
