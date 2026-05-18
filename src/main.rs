@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use arcli::cli::{
-    Cli, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands, LogCommands,
-    ProjectCommands,
+    Cli, ClaimCommands, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands,
+    LogCommands, ProjectCommands,
 };
-use arcli::commands::{config, data, db, env, exp, log, project};
+use arcli::commands::{claim, config, data, db, env, exp, log, project};
 use arcli::error::ArcliError;
 use arcli::output;
 use arcli::repo::Repository;
@@ -42,6 +42,16 @@ fn main() {
                 | ExpCommands::Import { json: true, .. }
                 | ExpCommands::Diff { json: true, .. }
         ),
+        Commands::Claim(cmd) => matches!(
+            cmd,
+            ClaimCommands::Add { json: true, .. }
+                | ClaimCommands::List { json: true }
+                | ClaimCommands::Show { json: true, .. }
+                | ClaimCommands::Verify { json: true, .. }
+                | ClaimCommands::Unverify { json: true, .. }
+                | ClaimCommands::Update { json: true, .. }
+                | ClaimCommands::Remove { json: true, .. }
+        ),
         Commands::Db(cmd) => matches!(
             cmd,
             DbCommands::Sync { json: true, .. }
@@ -61,6 +71,7 @@ fn main() {
         Commands::Env(cmd) => handle_env(cmd, cli.repo.as_deref(), json_mode),
         Commands::Data(cmd) => handle_data(cmd, cli.repo.as_deref(), json_mode),
         Commands::Exp(cmd) => handle_exp(cmd, cli.repo.as_deref(), json_mode),
+        Commands::Claim(cmd) => handle_claim(cmd, cli.repo.as_deref(), json_mode),
         Commands::Db(cmd) => handle_db(cmd, cli.repo.as_deref(), json_mode),
         Commands::Log(cmd) => handle_log(cmd, cli.repo.as_deref(), json_mode),
         Commands::Config(cmd) => handle_config(cmd, cli.repo.as_deref(), json_mode),
@@ -253,8 +264,8 @@ fn handle_data(
                 output::print_json(&results);
             } else {
                 println!(
-                    "{:<20} {:<15} {:<10} {}",
-                    "名称", "路径", "状态", "注册时间"
+                    "{:<20} {:<15} {:<10} 注册时间",
+                    "名称", "路径", "状态"
                 );
                 for r in &results {
                     println!(
@@ -287,6 +298,8 @@ fn handle_exp(
             notes,
             env: env_name,
             template,
+            claims,
+            hypothesis,
             json: _,
         } => {
             let (exp_id, exp_dir) = exp::new(
@@ -299,6 +312,8 @@ fn handle_exp(
                 notes.clone(),
                 env_name.clone(),
                 template.clone(),
+                claims.clone(),
+                hypothesis.clone(),
             )?;
             if json_mode {
                 let result = serde_json::json!({
@@ -475,6 +490,174 @@ fn handle_exp(
                 println!("{}", serde_json::json!({"diff": diff_output}));
             } else {
                 println!("{}", diff_output);
+            }
+            Ok(())
+        }
+        ExpCommands::Claim {
+            exp_id,
+            add,
+            remove,
+            json: _,
+        } => {
+            if let Some(claim_id) = add {
+                claim::verify(&repo, claim_id, exp_id)?;
+            }
+            if let Some(claim_id) = remove {
+                exp::remove_claim(&repo, exp_id, claim_id)?;
+            }
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": "updated"})
+                );
+            } else {
+                println!("实验 {} claim 关联已更新", exp_id);
+            }
+            Ok(())
+        }
+        ExpCommands::Hypothesis {
+            exp_id,
+            set,
+            json: _,
+        } => {
+            exp::set_hypothesis(&repo, exp_id, set)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": "updated"})
+                );
+            } else {
+                println!("实验 {} hypothesis 已更新", exp_id);
+            }
+            Ok(())
+        }
+        ExpCommands::Lesson {
+            exp_id,
+            set,
+            json: _,
+        } => {
+            exp::set_lesson(&repo, exp_id, set)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"exp_id": exp_id, "status": "updated"})
+                );
+            } else {
+                println!("实验 {} lesson 已更新", exp_id);
+            }
+            Ok(())
+        }
+    }
+}
+
+fn handle_claim(
+    cmd: &ClaimCommands,
+    repo_override: Option<&str>,
+    json_mode: bool,
+) -> Result<(), ArcliError> {
+    let repo = get_repo(repo_override)?;
+    match cmd {
+        ClaimCommands::Add {
+            id,
+            statement,
+            falsification,
+            json: _,
+        } => {
+            claim::add(&repo, id, statement, falsification)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"id": id.to_uppercase(), "status": "created"})
+                );
+            } else {
+                println!("claim '{}' 已创建", id.to_uppercase());
+            }
+            Ok(())
+        }
+        ClaimCommands::List { json: _ } => {
+            let claims = claim::list(&repo)?;
+            if json_mode {
+                output::print_json(&claims);
+            } else if claims.is_empty() {
+                println!("无已定义的 claim");
+            } else {
+                for c in &claims {
+                    println!(
+                        "  {} — {} ({} 实验验证)",
+                        c.id, c.statement, c.verified_by_count
+                    );
+                }
+            }
+            Ok(())
+        }
+        ClaimCommands::Show { id, json: _ } => {
+            let detail = claim::show(&repo, id)?;
+            if json_mode {
+                output::print_json(&detail);
+            } else {
+                println!("Claim: {}", detail.id);
+                println!("Statement: {}", detail.statement);
+                println!("Falsification: {}", detail.falsification);
+                println!("Verified by:");
+                if detail.verified_by.is_empty() {
+                    println!("  无");
+                } else {
+                    for ve in &detail.verified_by {
+                        println!(
+                            "  {} — status={} commit={}",
+                            ve.exp_id,
+                            ve.status,
+                            ve.commit_hash.as_deref().unwrap_or("N/A")
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
+        ClaimCommands::Verify { id, exp, json: _ } => {
+            claim::verify(&repo, id, exp)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"claim": id, "exp": exp, "status": "verified"})
+                );
+            } else {
+                println!("claim '{}' 已绑定实验 '{}'", id, exp);
+            }
+            Ok(())
+        }
+        ClaimCommands::Unverify { id, exp, json: _ } => {
+            claim::unverify(&repo, id, exp)?;
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"claim": id, "exp": exp, "status": "unverified"})
+                );
+            } else {
+                println!("已解除 claim '{}' 与实验 '{}' 的绑定", id, exp);
+            }
+            Ok(())
+        }
+        ClaimCommands::Update {
+            id,
+            statement,
+            falsification,
+            json: _,
+        } => {
+            claim::update(&repo, id, statement.as_deref(), falsification.as_deref())?;
+            if json_mode {
+                println!("{}", serde_json::json!({"id": id, "status": "updated"}));
+            } else {
+                println!("claim '{}' 已更新", id);
+            }
+            Ok(())
+        }
+        ClaimCommands::Remove { id, force, json: _ } => {
+            claim::remove(&repo, id, *force)?;
+            if json_mode {
+                println!("{}", serde_json::json!({"id": id, "status": "removed"}));
+            } else {
+                println!("claim '{}' 已删除", id);
             }
             Ok(())
         }

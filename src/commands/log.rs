@@ -31,13 +31,13 @@ fn show_inner(
     let reader = std::io::BufReader::new(file);
 
     if let Some(n) = tail {
-        let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+        let lines: Vec<String> = reader.lines().map_while(|r| r.ok()).collect();
         let start = lines.len().saturating_sub(n);
         for line in &lines[start..] {
             writeln!(writer, "{}", line)?;
         }
     } else {
-        for l in reader.lines().flatten() {
+        for l in reader.lines().map_while(|r| r.ok()) {
             writeln!(writer, "{}", l)?;
         }
     }
@@ -57,7 +57,7 @@ fn show_inner(
                 let file = fs::File::open(&log_path)?;
                 let mut new_reader = std::io::BufReader::new(file);
                 new_reader.seek(SeekFrom::Start(pos))?;
-                for l in new_reader.lines().flatten() {
+                for l in new_reader.lines().map_while(|r| r.ok()) {
                     writeln!(writer, "{}", l)?;
                 }
                 pos = len;

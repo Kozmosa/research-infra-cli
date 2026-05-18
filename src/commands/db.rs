@@ -291,6 +291,11 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
         .and_then(|v| v.as_i64())
         .map(|v| v as i32);
 
+    let relates_to_claims = json.get("relates_to_claims").and_then(|v| v.as_str());
+    let hypothesis = json.get("hypothesis").and_then(|v| v.as_str());
+    let _alternatives_considered = json.get("alternatives_considered").and_then(|v| v.as_str());
+    let lesson = json.get("lesson").and_then(|v| v.as_str());
+
     if db.get_experiment(&id)?.is_some() {
         db.upsert_experiment(
             &id,
@@ -304,6 +309,9 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
             params.as_deref(),
             notes,
             env,
+            relates_to_claims,
+            hypothesis,
+            lesson,
         )?;
     } else {
         db.insert_experiment(
@@ -317,6 +325,9 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
             params.as_deref(),
             notes,
             env,
+            relates_to_claims,
+            hypothesis,
+            lesson,
         )?;
     }
 
@@ -386,6 +397,27 @@ pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Val
     if let Some(ref e) = exp.env {
         map.insert("env".to_string(), serde_json::Value::String(e.clone()));
     }
+    if let Some(ref rc) = exp.relates_to_claims {
+        map.insert(
+            "relates_to_claims".to_string(),
+            serde_json::Value::String(rc.clone()),
+        );
+    }
+    if let Some(ref h) = exp.hypothesis {
+        map.insert(
+            "hypothesis".to_string(),
+            serde_json::Value::String(h.clone()),
+        );
+    }
+    if let Some(ref ac) = exp.alternatives_considered {
+        map.insert(
+            "alternatives_considered".to_string(),
+            serde_json::Value::String(ac.clone()),
+        );
+    }
+    if let Some(ref l) = exp.lesson {
+        map.insert("lesson".to_string(), serde_json::Value::String(l.clone()));
+    }
     if let Some(ref ec) = exp.exit_code {
         map.insert(
             "exit_code".to_string(),
@@ -439,6 +471,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None,
         )
         .unwrap();
 
@@ -496,6 +529,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None,
         )
         .unwrap();
 
@@ -521,6 +555,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None,
         )
         .unwrap();
 
@@ -547,6 +582,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None,
         )
         .unwrap();
 
@@ -584,6 +620,9 @@ mod tests {
             None,
             "python train.py",
             Some(r#"{"lr":0.01,"epochs":10}"#),
+            None,
+            None,
+            None,
             None,
             None,
         )
@@ -628,6 +667,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None,
         )
         .unwrap();
 
