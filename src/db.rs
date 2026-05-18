@@ -44,6 +44,10 @@ impl Database {
                 params TEXT,
                 notes TEXT,
                 env TEXT,
+                relates_to_claims TEXT,
+                hypothesis TEXT,
+                alternatives_considered TEXT,
+                lesson TEXT,
                 exit_code INTEGER,
                 updated_at TEXT NOT NULL
             );
@@ -66,8 +70,24 @@ impl Database {
                 description TEXT,
                 registered_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS claims (
+                id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            );
             ",
         )?;
+
+        // v0.3.0 column migrations (ignore errors if columns already exist)
+        let new_columns = [
+            "ALTER TABLE experiments ADD COLUMN relates_to_claims TEXT",
+            "ALTER TABLE experiments ADD COLUMN hypothesis TEXT",
+            "ALTER TABLE experiments ADD COLUMN alternatives_considered TEXT",
+            "ALTER TABLE experiments ADD COLUMN lesson TEXT",
+        ];
+        for stmt in &new_columns {
+            let _ = self.conn.execute(stmt, []);
+        }
         Ok(())
     }
 
@@ -82,6 +102,7 @@ impl Database {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_experiment(
         &self,
         id: &str,
@@ -94,10 +115,13 @@ impl Database {
         params: Option<&str>,
         notes: Option<&str>,
         env: Option<&str>,
+        relates_to_claims: Option<&str>,
+        hypothesis: Option<&str>,
+        lesson: Option<&str>,
     ) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, relates_to_claims, hypothesis, lesson, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             [
                 id, short_id, status, created_at,
                 commit_hash.unwrap_or(""),
@@ -106,6 +130,9 @@ impl Database {
                 params.unwrap_or(""),
                 notes.unwrap_or(""),
                 env.unwrap_or(""),
+                relates_to_claims.unwrap_or(""),
+                hypothesis.unwrap_or(""),
+                lesson.unwrap_or(""),
                 created_at,
             ],
         )?;
@@ -114,7 +141,7 @@ impl Database {
 
     pub fn get_experiment(&self, exp_id: &str) -> Result<Option<Experiment>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, short_id, status, created_at, started_at, finished_at, commit_hash, data_used, command, params, notes, env, exit_code, updated_at
+            "SELECT id, short_id, status, created_at, started_at, finished_at, commit_hash, data_used, command, params, notes, env, relates_to_claims, hypothesis, alternatives_considered, lesson, exit_code, updated_at
              FROM experiments WHERE id = ?1"
         )?;
         let mut rows = stmt.query([exp_id])?;
@@ -132,8 +159,14 @@ impl Database {
                 params: row.get::<_, Option<String>>(9)?.filter(|s| !s.is_empty()),
                 notes: row.get::<_, Option<String>>(10)?.filter(|s| !s.is_empty()),
                 env: row.get::<_, Option<String>>(11)?.filter(|s| !s.is_empty()),
-                exit_code: row.get(12)?,
-                updated_at: row.get(13)?,
+                relates_to_claims: row.get::<_, Option<String>>(12)?.filter(|s| !s.is_empty()),
+                hypothesis: row.get::<_, Option<String>>(13)?.filter(|s| !s.is_empty()),
+                alternatives_considered: row
+                    .get::<_, Option<String>>(14)?
+                    .filter(|s| !s.is_empty()),
+                lesson: row.get::<_, Option<String>>(15)?.filter(|s| !s.is_empty()),
+                exit_code: row.get(16)?,
+                updated_at: row.get(17)?,
             }))
         } else {
             Ok(None)
@@ -253,6 +286,7 @@ impl Database {
         Ok(result)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert_experiment(
         &self,
         id: &str,
@@ -266,10 +300,13 @@ impl Database {
         params: Option<&str>,
         notes: Option<&str>,
         env: Option<&str>,
+        relates_to_claims: Option<&str>,
+        hypothesis: Option<&str>,
+        lesson: Option<&str>,
     ) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "INSERT INTO experiments (id, short_id, status, created_at, commit_hash, data_used, command, params, notes, env, relates_to_claims, hypothesis, lesson, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
              ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 commit_hash = excluded.commit_hash,
@@ -278,6 +315,9 @@ impl Database {
                 params = excluded.params,
                 notes = excluded.notes,
                 env = excluded.env,
+                relates_to_claims = excluded.relates_to_claims,
+                hypothesis = excluded.hypothesis,
+                lesson = excluded.lesson,
                 updated_at = excluded.updated_at",
             [
                 id, short_id, status, created_at,
@@ -287,6 +327,9 @@ impl Database {
                 params.unwrap_or(""),
                 notes.unwrap_or(""),
                 env.unwrap_or(""),
+                relates_to_claims.unwrap_or(""),
+                hypothesis.unwrap_or(""),
+                lesson.unwrap_or(""),
                 updated_at,
             ],
         )?;
@@ -385,6 +428,96 @@ impl Database {
         )?;
         Ok(())
     }
+
+    pub fn ensure_claim(&self, id: &str) -> Result<()> {
+        let now = chrono::Local::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO claims (id, created_at) VALUES (?1, ?2)",
+            [id, &now],
+        )?;
+        Ok(())
+    }
+
+    pub fn add_claim_to_experiment(&self, exp_id: &str, claim_id: &str) -> Result<()> {
+        let exp = self
+            .get_experiment(exp_id)?
+            .ok_or_else(|| crate::error::ArcliError::ExperimentNotFound(exp_id.to_string()))?;
+
+        let mut claims: Vec<String> = exp
+            .relates_to_claims
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
+        if !claims.iter().any(|c| c == claim_id) {
+            claims.push(claim_id.to_string());
+        }
+
+        let json = serde_json::to_string(&claims)?;
+        let updated_at = chrono::Local::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE experiments SET relates_to_claims = ?1, updated_at = ?2 WHERE id = ?3",
+            [&json, &updated_at, exp_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_claim_from_experiment(&self, exp_id: &str, claim_id: &str) -> Result<()> {
+        let exp = self
+            .get_experiment(exp_id)?
+            .ok_or_else(|| crate::error::ArcliError::ExperimentNotFound(exp_id.to_string()))?;
+
+        let mut claims: Vec<String> = exp
+            .relates_to_claims
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
+        claims.retain(|c| c != claim_id);
+
+        let json = if claims.is_empty() {
+            String::new()
+        } else {
+            serde_json::to_string(&claims)?
+        };
+        let updated_at = chrono::Local::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE experiments SET relates_to_claims = ?1, updated_at = ?2 WHERE id = ?3",
+            [&json, &updated_at, exp_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_experiments_referencing_claim(&self, claim_id: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM experiments WHERE relates_to_claims LIKE ?1")?;
+        let pattern = format!("%\"{}\"%", claim_id);
+        let rows = stmt.query_map([&pattern], |row| row.get(0))?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
+    }
+
+    pub fn set_hypothesis(&self, exp_id: &str, hypothesis: &str) -> Result<()> {
+        let updated_at = chrono::Local::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE experiments SET hypothesis = ?1, updated_at = ?2 WHERE id = ?3",
+            [hypothesis, &updated_at, exp_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_lesson(&self, exp_id: &str, lesson: &str) -> Result<()> {
+        let updated_at = chrono::Local::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE experiments SET lesson = ?1, updated_at = ?2 WHERE id = ?3",
+            [lesson, &updated_at, exp_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -401,6 +534,10 @@ pub struct Experiment {
     pub params: Option<String>,
     pub notes: Option<String>,
     pub env: Option<String>,
+    pub relates_to_claims: Option<String>,
+    pub hypothesis: Option<String>,
+    pub alternatives_considered: Option<String>,
+    pub lesson: Option<String>,
     pub exit_code: Option<i32>,
     pub updated_at: String,
 }
@@ -467,6 +604,9 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -488,6 +628,9 @@ mod tests {
             None,
             None,
             "python train.py",
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -519,6 +662,9 @@ mod tests {
             None,
             None,
             "python train.py",
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -565,6 +711,9 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         db.insert_experiment(
@@ -575,6 +724,9 @@ mod tests {
             None,
             None,
             "python eval.py",
+            None,
+            None,
+            None,
             None,
             None,
             None,

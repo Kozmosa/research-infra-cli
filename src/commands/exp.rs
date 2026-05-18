@@ -6,6 +6,7 @@ use crate::db::Database;
 use crate::error::{ArcliError, Result};
 use crate::repo::Repository;
 
+#[allow(clippy::too_many_arguments)]
 pub fn new(
     repo: &Repository,
     data_name: Option<String>,
@@ -16,6 +17,8 @@ pub fn new(
     notes: Option<String>,
     env: Option<String>,
     template: Option<String>,
+    claims: Option<String>,
+    hypothesis: Option<String>,
 ) -> Result<(String, String)> {
     if !manual {
         if data_name.is_none() {
@@ -71,7 +74,9 @@ pub fn new(
         Ok(git_repo) => {
             let mut diff_opts = git2::DiffOptions::new();
             diff_opts.include_untracked(true);
-            let diff = git_repo.diff_index_to_workdir(None, Some(&mut diff_opts)).ok();
+            let diff = git_repo
+                .diff_index_to_workdir(None, Some(&mut diff_opts))
+                .ok();
 
             let mut diff_text = String::new();
             if let Some(d) = diff {
@@ -83,7 +88,8 @@ pub fn new(
                         }
                     }
                     true
-                }).ok();
+                })
+                .ok();
             }
 
             if diff_text.trim().is_empty() {
@@ -96,6 +102,31 @@ pub fn new(
     };
 
     let created_at = now.to_rfc3339();
+
+    // Parse and validate claims
+    let relates_to_claims: Option<Vec<String>> = claims.as_ref().map(|c| {
+        c.split(',')
+            .map(|s| s.trim().to_uppercase().to_string())
+            .collect()
+    });
+
+    if let Some(ref claim_ids) = relates_to_claims {
+        let claims_path = repo.claims_path();
+        let cf = crate::commands::claim::load_claims(&claims_path)?;
+        for cid in claim_ids {
+            if !cf.claims.contains_key(cid) {
+                return Err(ArcliError::ClaimNotFound(cid.clone()));
+            }
+        }
+    }
+
+    let relates_to_claims_json = relates_to_claims
+        .as_ref()
+        .map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null));
+
+    let relates_to_claims_json_str = relates_to_claims
+        .as_ref()
+        .and_then(|v| serde_json::to_string(v).ok());
 
     let experiment_json = serde_json::json!({
         "id": &exp_id,
@@ -115,6 +146,8 @@ pub fn new(
         "env_snapshot": null,
         "diff_at_creation": diff_at_creation,
         "artifacts_index": [],
+        "relates_to_claims": relates_to_claims_json,
+        "hypothesis": hypothesis,
     });
 
     let json_path = exp_dir.join("experiment.json");
@@ -131,6 +164,9 @@ pub fn new(
         params.as_deref(),
         notes.as_deref(),
         env.as_deref(),
+        relates_to_claims_json_str.as_deref(),
+        hypothesis.as_deref(),
+        None,
     )?;
 
     if let Some(tpl) = template {
@@ -249,7 +285,7 @@ pub fn run(
         use std::io::{BufRead, BufReader, Write};
         let mut log = std::io::BufWriter::new(log_file);
         let reader = BufReader::new(stdout);
-        for l in reader.lines().flatten() {
+        for l in reader.lines().map_while(|r| r.ok()) {
             println!("{}", l);
             let _ = writeln!(log, "[stdout] {}", l);
             let _ = log.flush();
@@ -260,7 +296,7 @@ pub fn run(
         use std::io::{BufRead, BufReader, Write};
         let mut log = std::io::BufWriter::new(log_file2);
         let reader = BufReader::new(stderr);
-        for l in reader.lines().flatten() {
+        for l in reader.lines().map_while(|r| r.ok()) {
             eprintln!("{}", l);
             let _ = writeln!(log, "[stderr] {}", l);
             let _ = log.flush();
@@ -706,10 +742,7 @@ fn discover_artifacts(
 
     let mut artifacts = Vec::new();
 
-    let git_repo = match git2::Repository::open(repo_root) {
-        Ok(r) => Some(r),
-        Err(_) => None,
-    };
+    let git_repo = git2::Repository::open(repo_root).ok();
 
     for entry in WalkDir::new(exp_dir) {
         let entry = entry?;
@@ -744,10 +777,10 @@ fn discover_artifacts(
         // Skip gitignored files
         if let Some(ref repo) = git_repo {
             let abs_path = path.to_path_buf();
-            if let Ok(ignored) = repo.status_should_ignore(&abs_path) {
-                if ignored {
-                    continue;
-                }
+            if let Ok(ignored) = repo.status_should_ignore(&abs_path)
+                && ignored
+            {
+                continue;
             }
         }
 
@@ -1040,9 +1073,76 @@ pub fn import(
         None,
         Some(&format!("Imported from {}", source_path.display())),
         None,
+        None,
+        None,
+        None,
     )?;
 
     Ok(exp_id)
+}
+
+pub fn set_hypothesis(repo: &Repository, exp_id: &str, hypothesis: &str) -> Result<()> {
+    let db = Database::open(&repo.db_path())?;
+    db.set_hypothesis(exp_id, hypothesis)?;
+    update_json_field(
+        repo,
+        exp_id,
+        "hypothesis",
+        serde_json::Value::String(hypothesis.to_string()),
+    )?;
+    Ok(())
+}
+
+pub fn set_lesson(repo: &Repository, exp_id: &str, lesson: &str) -> Result<()> {
+    let db = Database::open(&repo.db_path())?;
+    db.set_lesson(exp_id, lesson)?;
+    update_json_field(
+        repo,
+        exp_id,
+        "lesson",
+        serde_json::Value::String(lesson.to_string()),
+    )?;
+    Ok(())
+}
+
+pub fn add_claim(repo: &Repository, exp_id: &str, claim_id: &str) -> Result<()> {
+    let db = Database::open(&repo.db_path())?;
+    db.add_claim_to_experiment(exp_id, &claim_id.to_uppercase())?;
+    if let Some(exp) = db.get_experiment(exp_id)? {
+        let json = crate::commands::db::experiment_to_json(&exp)?;
+        let json_path = repo.exp_json_path(exp_id);
+        fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+    }
+    Ok(())
+}
+
+pub fn remove_claim(repo: &Repository, exp_id: &str, claim_id: &str) -> Result<()> {
+    let db = Database::open(&repo.db_path())?;
+    db.remove_claim_from_experiment(exp_id, &claim_id.to_uppercase())?;
+    if let Some(exp) = db.get_experiment(exp_id)? {
+        let json = crate::commands::db::experiment_to_json(&exp)?;
+        let json_path = repo.exp_json_path(exp_id);
+        fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+    }
+    Ok(())
+}
+
+fn update_json_field(
+    repo: &Repository,
+    exp_id: &str,
+    key: &str,
+    value: serde_json::Value,
+) -> Result<()> {
+    let json_path = repo.exp_json_path(exp_id);
+    if json_path.exists() {
+        let content = fs::read_to_string(&json_path)?;
+        let mut json: serde_json::Value = serde_json::from_str(&content)?;
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert(key.to_string(), value);
+        }
+        fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1111,6 +1211,9 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1147,6 +1250,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1174,8 +1279,10 @@ mod tests {
         fs::write(root.join(".research/hooks/pre-experiment"), "#!/bin/sh\n").unwrap();
         fs::create_dir_all(root.join("exps")).unwrap();
 
-        let mut config = crate::config::Config::default();
-        config.experiments_dir = "exps".to_string();
+        let config = crate::config::Config {
+            experiments_dir: "exps".to_string(),
+            ..Default::default()
+        };
         config.save(&root.join(".research/config.yaml")).unwrap();
 
         let db = Database::open(&root.join(".research/research.db")).unwrap();
@@ -1213,6 +1320,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1226,7 +1335,9 @@ mod tests {
     fn test_new_requires_data_and_cmd() {
         let (repo, _dir) = create_test_repo();
 
-        let result = new(&repo, None, None, false, None, None, None, None, None);
+        let result = new(
+            &repo, None, None, false, None, None, None, None, None, None, None,
+        );
         assert!(matches!(result, Err(ArcliError::MissingRequiredArg(_))));
     }
 
@@ -1244,6 +1355,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         );
         assert!(matches!(result, Err(ArcliError::DataNotFound(_))));
     }
@@ -1252,7 +1365,10 @@ mod tests {
     fn test_new_manual_mode_bypasses_data_requirement() {
         let (repo, _dir) = create_test_repo();
 
-        let (exp_id, _) = new(&repo, None, None, true, None, None, None, None, None).unwrap();
+        let (exp_id, _) = new(
+            &repo, None, None, true, None, None, None, None, None, None, None,
+        )
+        .unwrap();
 
         let db = Database::open(&repo.db_path()).unwrap();
         let exp = db.get_experiment(&exp_id).unwrap().unwrap();
@@ -1277,6 +1393,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         );
         assert!(matches!(result, Err(ArcliError::WorkspaceNotClean)));
     }
@@ -1290,6 +1408,8 @@ mod tests {
             None,
             Some("echo 1".to_string()),
             true,
+            None,
+            None,
             None,
             None,
             None,
@@ -1318,6 +1438,8 @@ mod tests {
             None,
             Some("echo 2".to_string()),
             true,
+            None,
+            None,
             None,
             None,
             None,
@@ -1718,6 +1840,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1767,7 +1891,15 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         fs::write(source.join("experiment.json"), "{}").unwrap();
 
-        let result = import(&repo, source.to_str().unwrap(), "existing", "cmd", None, false, true);
+        let result = import(
+            &repo,
+            source.to_str().unwrap(),
+            "existing",
+            "cmd",
+            None,
+            false,
+            true,
+        );
         assert!(matches!(result, Err(ArcliError::ImportPathInvalid(_))));
     }
 }

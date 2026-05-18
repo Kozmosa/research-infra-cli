@@ -1,3 +1,4 @@
+pub mod claim;
 pub mod config;
 pub mod data;
 pub mod db;

@@ -119,7 +119,10 @@ fn generate_project_structure(exp_dir: &str, rt: &ResearchType) -> String {
             lines.insert(9, "├── checkpoints/             # 训练检查点".to_string());
         }
         ResearchType::Data => {
-            lines.insert(8, "├── notebooks/               # Jupyter notebooks".to_string());
+            lines.insert(
+                8,
+                "├── notebooks/               # Jupyter notebooks".to_string(),
+            );
             lines.insert(9, "├── reports/                 # 分析报告".to_string());
         }
         ResearchType::Math => {

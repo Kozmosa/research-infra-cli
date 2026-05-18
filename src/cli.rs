@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Parser)]
 #[command(name = "arcli")]
 #[command(about = "Research CLI - 为 AI agent 和人类研究员提供预结构化、可复现的研究工作环境")]
-#[command(version = "0.2.0")]
+#[command(version = "0.3.0")]
 pub struct Cli {
     #[arg(long, env = "RESEARCH_REPO", help = "指定仓库根目录")]
     pub repo: Option<String>,
@@ -25,6 +25,9 @@ pub enum Commands {
 
     #[command(subcommand)]
     Exp(ExpCommands),
+
+    #[command(subcommand)]
+    Claim(ClaimCommands),
 
     #[command(subcommand)]
     Db(DbCommands),
@@ -50,6 +53,77 @@ pub enum TechStack {
     Rust,
     Julia,
     Go,
+}
+
+#[derive(Subcommand)]
+pub enum ClaimCommands {
+    Add {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID (e.g. C1, C2)")]
+        id: String,
+
+        #[arg(long, help = "可证伪的论断")]
+        statement: String,
+
+        #[arg(long, help = "什么条件会推翻这个 claim")]
+        falsification: String,
+    },
+    List {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+    },
+    Show {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID")]
+        id: String,
+    },
+    Verify {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID")]
+        id: String,
+
+        #[arg(long, help = "绑定的实验 ID")]
+        exp: String,
+    },
+    Unverify {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID")]
+        id: String,
+
+        #[arg(long, help = "解除绑定的实验 ID")]
+        exp: String,
+    },
+    Update {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID")]
+        id: String,
+
+        #[arg(long, help = "更新 statement")]
+        statement: Option<String>,
+
+        #[arg(long, help = "更新 falsification")]
+        falsification: Option<String>,
+    },
+    Remove {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "Claim ID")]
+        id: String,
+
+        #[arg(long, help = "强制删除（即使有实验关联）")]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -180,6 +254,12 @@ pub enum ExpCommands {
 
         #[arg(long, help = "实验模板")]
         template: Option<String>,
+
+        #[arg(long, help = "关联的 claim ID（逗号分隔）")]
+        claims: Option<String>,
+
+        #[arg(long, help = "该实验试图测试什么假设")]
+        hypothesis: Option<String>,
     },
     Run {
         #[arg(long, global = true, help = "以 JSON 格式输出")]
@@ -307,6 +387,42 @@ pub enum ExpCommands {
 
         #[arg(long, help = "显示完整 diff 内容")]
         full: bool,
+    },
+    /// 管理实验的 claim 关联
+    Claim {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "实验 ID")]
+        exp_id: String,
+
+        #[arg(long, help = "添加 claim 关联")]
+        add: Option<String>,
+
+        #[arg(long, help = "移除 claim 关联")]
+        remove: Option<String>,
+    },
+    /// 设置实验 hypothesis
+    Hypothesis {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "实验 ID")]
+        exp_id: String,
+
+        #[arg(long, help = "hypothesis 文本")]
+        set: String,
+    },
+    /// 记录实验经验教训
+    Lesson {
+        #[arg(long, global = true, help = "以 JSON 格式输出")]
+        json: bool,
+
+        #[arg(help = "实验 ID")]
+        exp_id: String,
+
+        #[arg(long, help = "lesson 文本")]
+        set: String,
     },
 }
 

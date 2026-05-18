@@ -62,6 +62,10 @@ impl Repository {
         self.research_dir().join("data_index.yaml")
     }
 
+    pub fn claims_path(&self) -> PathBuf {
+        self.research_dir().join("claims.yaml")
+    }
+
     pub fn experiments_dir(&self) -> PathBuf {
         let config = Config::load(&self.config_path()).unwrap_or_default();
         self.root.join(&config.experiments_dir)
