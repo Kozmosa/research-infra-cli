@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Parser)]
 #[command(name = "arcli")]
 #[command(about = "Research CLI - 为 AI agent 和人类研究员提供预结构化、可复现的研究工作环境")]
-#[command(version = "0.2.0")]
+#[command(version = "0.3.0")]
 pub struct Cli {
     #[arg(long, env = "RESEARCH_REPO", help = "指定仓库根目录")]
     pub repo: Option<String>,
