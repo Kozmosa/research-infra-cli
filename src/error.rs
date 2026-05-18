@@ -16,6 +16,10 @@ pub enum ArcliError {
     CommitNotReachable(String),
     ExperimentTimeout(u64),
     ImportPathInvalid(String),
+    ClaimExists(String),
+    ClaimNotFound(String),
+    ClaimHasExperiments(String),
+    ClaimAlreadyVerified(String),
     Io(std::io::Error),
     Sqlite(rusqlite::Error),
     Yaml(serde_yaml::Error),
@@ -42,6 +46,14 @@ impl fmt::Display for ArcliError {
             ArcliError::CommitNotReachable(hash) => write!(f, "commit '{}' 在当前仓库中不可达（可能已被 GC）", hash),
             ArcliError::ExperimentTimeout(secs) => write!(f, "实验超时: {}秒", secs),
             ArcliError::ImportPathInvalid(path) => write!(f, "导入路径无效: {}", path),
+            ArcliError::ClaimExists(id) => write!(f, "claim '{}' 已存在", id),
+            ArcliError::ClaimNotFound(id) => write!(f, "claim '{}' 未找到", id),
+            ArcliError::ClaimHasExperiments(id) => {
+                write!(f, "claim '{}' 仍有实验引用，使用 --force 强制删除", id)
+            }
+            ArcliError::ClaimAlreadyVerified(id) => {
+                write!(f, "claim '{}' 已被该实验验证，重复绑定无效", id)
+            }
             ArcliError::Io(e) => write!(f, "IO 错误: {}", e),
             ArcliError::Sqlite(e) => write!(f, "数据库错误: {}", e),
             ArcliError::Yaml(e) => write!(f, "YAML 错误: {}", e),
@@ -108,6 +120,10 @@ impl ArcliError {
             ArcliError::CommitNotReachable(_) => "COMMIT_NOT_REACHABLE",
             ArcliError::ExperimentTimeout(_) => "EXPERIMENT_TIMEOUT",
             ArcliError::ImportPathInvalid(_) => "IMPORT_PATH_INVALID",
+            ArcliError::ClaimExists(_) => "CLAIM_EXISTS",
+            ArcliError::ClaimNotFound(_) => "CLAIM_NOT_FOUND",
+            ArcliError::ClaimHasExperiments(_) => "CLAIM_HAS_EXPERIMENTS",
+            ArcliError::ClaimAlreadyVerified(_) => "CLAIM_ALREADY_VERIFIED",
             ArcliError::Io(_) => "IO_ERROR",
             ArcliError::Sqlite(_) => "SQLITE_ERROR",
             ArcliError::Yaml(_) => "YAML_ERROR",
@@ -152,6 +168,16 @@ mod tests {
             (
                 ArcliError::SyncConflict(vec!["x".to_string()]),
                 "SYNC_CONFLICT",
+            ),
+            (ArcliError::ClaimExists("C1".to_string()), "CLAIM_EXISTS"),
+            (ArcliError::ClaimNotFound("C1".to_string()), "CLAIM_NOT_FOUND"),
+            (
+                ArcliError::ClaimHasExperiments("C1".to_string()),
+                "CLAIM_HAS_EXPERIMENTS",
+            ),
+            (
+                ArcliError::ClaimAlreadyVerified("C1".to_string()),
+                "CLAIM_ALREADY_VERIFIED",
             ),
             (ArcliError::Io(std::io::Error::other("x")), "IO_ERROR"),
             (
