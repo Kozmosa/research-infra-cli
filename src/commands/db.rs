@@ -398,10 +398,9 @@ pub fn experiment_to_json(exp: &crate::db::Experiment) -> Result<serde_json::Val
         map.insert("env".to_string(), serde_json::Value::String(e.clone()));
     }
     if let Some(ref rc) = exp.relates_to_claims {
-        map.insert(
-            "relates_to_claims".to_string(),
-            serde_json::Value::String(rc.clone()),
-        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(rc).unwrap_or(serde_json::Value::String(rc.clone()));
+        map.insert("relates_to_claims".to_string(), parsed);
     }
     if let Some(ref h) = exp.hypothesis {
         map.insert(

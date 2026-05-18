@@ -486,6 +486,19 @@ impl Database {
         Ok(())
     }
 
+    pub fn get_experiments_referencing_claim(&self, claim_id: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM experiments WHERE relates_to_claims LIKE ?1"
+        )?;
+        let pattern = format!("%\"{}\"%", claim_id);
+        let rows = stmt.query_map([&pattern], |row| row.get(0))?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
+    }
+
     pub fn set_hypothesis(&self, exp_id: &str, hypothesis: &str) -> Result<()> {
         let updated_at = chrono::Local::now().to_rfc3339();
         self.conn.execute(

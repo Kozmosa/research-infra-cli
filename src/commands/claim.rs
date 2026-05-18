@@ -56,7 +56,7 @@ fn now() -> String {
     chrono::Local::now().to_rfc3339()
 }
 
-pub(crate) fn load_claims(path: &Path) -> Result<ClaimsFile> {
+pub fn load_claims(path: &Path) -> Result<ClaimsFile> {
     if path.exists() {
         let content = fs::read_to_string(path)?;
         let cf: ClaimsFile = serde_yaml::from_str(&content)?;
@@ -189,7 +189,14 @@ pub fn unverify(repo: &Repository, claim_id: &str, exp_id: &str) -> Result<()> {
         .get_mut(&id_upper)
         .ok_or_else(|| ArcliError::ClaimNotFound(id_upper.clone()))?;
 
+    let old_len = claim.verified_by.len();
     claim.verified_by.retain(|e| e != exp_id);
+    if claim.verified_by.len() == old_len {
+        return Err(ArcliError::ClaimNotFound(format!(
+            "实验 {} 的绑定",
+            exp_id
+        )));
+    }
     claim.updated_at = now();
     save_claims(&path, &cf)?;
 
@@ -235,8 +242,15 @@ pub fn remove(repo: &Repository, id: &str, force: bool) -> Result<()> {
         .get(&id_upper)
         .ok_or_else(|| ArcliError::ClaimNotFound(id_upper.clone()))?;
 
-    if !claim.verified_by.is_empty() && !force {
-        return Err(ArcliError::ClaimHasExperiments(id_upper));
+    if !force {
+        if !claim.verified_by.is_empty() {
+            return Err(ArcliError::ClaimHasExperiments(id_upper));
+        }
+        let db = Database::open(&repo.db_path())?;
+        let refs = db.get_experiments_referencing_claim(&id_upper)?;
+        if !refs.is_empty() {
+            return Err(ArcliError::ClaimHasExperiments(id_upper));
+        }
     }
 
     cf.claims.remove(&id_upper);

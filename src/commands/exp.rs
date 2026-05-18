@@ -1090,6 +1090,17 @@ pub fn set_lesson(repo: &Repository, exp_id: &str, lesson: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn add_claim(repo: &Repository, exp_id: &str, claim_id: &str) -> Result<()> {
+    let db = Database::open(&repo.db_path())?;
+    db.add_claim_to_experiment(exp_id, &claim_id.to_uppercase())?;
+    if let Some(exp) = db.get_experiment(exp_id)? {
+        let json = crate::commands::db::experiment_to_json(&exp)?;
+        let json_path = repo.exp_json_path(exp_id);
+        fs::write(&json_path, serde_json::to_string_pretty(&json)?)?;
+    }
+    Ok(())
+}
+
 pub fn remove_claim(repo: &Repository, exp_id: &str, claim_id: &str) -> Result<()> {
     let db = Database::open(&repo.db_path())?;
     db.remove_claim_from_experiment(exp_id, &claim_id.to_uppercase())?;
