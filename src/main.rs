@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use arcli::cli::{
-    Cli, ClaimCommands, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands, ExpCommands,
-    LogCommands, ProjectCommands,
+    ClaimCommands, Cli, Commands, ConfigCommands, DataCommands, DbCommands, EnvCommands,
+    ExpCommands, LogCommands, ProjectCommands,
 };
 use arcli::commands::{claim, config, data, db, env, exp, log, project};
 use arcli::error::ArcliError;
@@ -246,10 +246,7 @@ fn handle_data(
         } => {
             data::update(&repo, name, path.clone(), *recompute_checksum)?;
             if json_mode {
-                println!(
-                    "{}",
-                    serde_json::json!({"name": name, "status": "updated"})
-                );
+                println!("{}", serde_json::json!({"name": name, "status": "updated"}));
             } else {
                 println!("数据资产 '{}' 已更新", name);
             }
@@ -263,10 +260,7 @@ fn handle_data(
             if json_mode {
                 output::print_json(&results);
             } else {
-                println!(
-                    "{:<20} {:<15} {:<10} 注册时间",
-                    "名称", "路径", "状态"
-                );
+                println!("{:<20} {:<15} {:<10} 注册时间", "名称", "路径", "状态");
                 for r in &results {
                     println!(
                         "{:<20} {:<15} {:<10} {}",
@@ -398,10 +392,7 @@ fn handle_exp(
         } => {
             let path = exp::export(&repo, exp_id, output.as_deref())?;
             if json_mode {
-                println!(
-                    "{}",
-                    serde_json::json!({"exp_id": exp_id, "path": path})
-                );
+                println!("{}", serde_json::json!({"exp_id": exp_id, "path": path}));
             } else {
                 println!("实验已导出到: {}", path);
             }
@@ -504,6 +495,8 @@ fn handle_exp(
             }
             if let Some(claim_id) = remove {
                 exp::remove_claim(&repo, exp_id, claim_id)?;
+                // Also unverify claim-side to keep bidirectional binding consistent
+                let _ = claim::unverify(&repo, claim_id, exp_id);
             }
             if json_mode {
                 println!(
@@ -778,7 +771,11 @@ fn handle_config(
             }
             Ok(())
         }
-        ConfigCommands::Set { key, value, json: _ } => {
+        ConfigCommands::Set {
+            key,
+            value,
+            json: _,
+        } => {
             config::set(&repo, key, value)?;
             if json_mode {
                 println!(

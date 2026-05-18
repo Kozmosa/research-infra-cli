@@ -43,7 +43,9 @@ impl fmt::Display for ArcliError {
             ArcliError::ConfigKeyNotFound(k) => write!(f, "配置键 '{}' 未找到", k),
             ArcliError::SyncConflict(ids) => write!(f, "同步冲突的实验: {:?}", ids),
             ArcliError::ExperimentNotFound(id) => write!(f, "实验 '{}' 未找到", id),
-            ArcliError::CommitNotReachable(hash) => write!(f, "commit '{}' 在当前仓库中不可达（可能已被 GC）", hash),
+            ArcliError::CommitNotReachable(hash) => {
+                write!(f, "commit '{}' 在当前仓库中不可达（可能已被 GC）", hash)
+            }
             ArcliError::ExperimentTimeout(secs) => write!(f, "实验超时: {}秒", secs),
             ArcliError::ImportPathInvalid(path) => write!(f, "导入路径无效: {}", path),
             ArcliError::ClaimExists(id) => write!(f, "claim '{}' 已存在", id),
@@ -170,7 +172,10 @@ mod tests {
                 "SYNC_CONFLICT",
             ),
             (ArcliError::ClaimExists("C1".to_string()), "CLAIM_EXISTS"),
-            (ArcliError::ClaimNotFound("C1".to_string()), "CLAIM_NOT_FOUND"),
+            (
+                ArcliError::ClaimNotFound("C1".to_string()),
+                "CLAIM_NOT_FOUND",
+            ),
             (
                 ArcliError::ClaimHasExperiments("C1".to_string()),
                 "CLAIM_HAS_EXPERIMENTS",

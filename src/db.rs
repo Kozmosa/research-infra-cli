@@ -161,7 +161,9 @@ impl Database {
                 env: row.get::<_, Option<String>>(11)?.filter(|s| !s.is_empty()),
                 relates_to_claims: row.get::<_, Option<String>>(12)?.filter(|s| !s.is_empty()),
                 hypothesis: row.get::<_, Option<String>>(13)?.filter(|s| !s.is_empty()),
-                alternatives_considered: row.get::<_, Option<String>>(14)?.filter(|s| !s.is_empty()),
+                alternatives_considered: row
+                    .get::<_, Option<String>>(14)?
+                    .filter(|s| !s.is_empty()),
                 lesson: row.get::<_, Option<String>>(15)?.filter(|s| !s.is_empty()),
                 exit_code: row.get(16)?,
                 updated_at: row.get(17)?,
@@ -487,9 +489,9 @@ impl Database {
     }
 
     pub fn get_experiments_referencing_claim(&self, claim_id: &str) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id FROM experiments WHERE relates_to_claims LIKE ?1"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM experiments WHERE relates_to_claims LIKE ?1")?;
         let pattern = format!("%\"{}\"%", claim_id);
         let rows = stmt.query_map([&pattern], |row| row.get(0))?;
         let mut ids = Vec::new();
@@ -602,7 +604,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -627,7 +631,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -659,7 +665,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -703,7 +711,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         db.insert_experiment(
@@ -717,7 +727,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 

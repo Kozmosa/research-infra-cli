@@ -42,7 +42,12 @@ fn setup() -> (Repository, tempfile::TempDir) {
         .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
         .unwrap();
 
-    (Repository { root: root.to_path_buf() }, dir)
+    (
+        Repository {
+            root: root.to_path_buf(),
+        },
+        dir,
+    )
 }
 
 fn commit_all(repo: &Repository) {
@@ -78,13 +83,7 @@ fn test_add_and_list_claims() {
     assert_eq!(list[0].id, "C1");
 
     // duplicate fails
-    let err = claim::add(
-        &repo,
-        "C1",
-        "Another statement",
-        "Another falsification",
-    )
-    .unwrap_err();
+    let err = claim::add(&repo, "C1", "Another statement", "Another falsification").unwrap_err();
     assert!(err.to_string().contains("已存在"));
 }
 
@@ -111,7 +110,13 @@ fn test_update_claim() {
     let (repo, _dir) = setup();
 
     claim::add(&repo, "C2", "Old statement", "Old falsification").unwrap();
-    claim::update(&repo, "C2", Some("New statement"), Some("New falsification")).unwrap();
+    claim::update(
+        &repo,
+        "C2",
+        Some("New statement"),
+        Some("New falsification"),
+    )
+    .unwrap();
 
     let detail = claim::show(&repo, "C2").unwrap();
     assert_eq!(detail.statement, "New statement");

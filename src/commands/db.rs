@@ -291,7 +291,15 @@ fn import_single_file(db: &Database, path: &Path) -> Result<()> {
         .and_then(|v| v.as_i64())
         .map(|v| v as i32);
 
-    let relates_to_claims = json.get("relates_to_claims").and_then(|v| v.as_str());
+    let relates_to_claims = json.get("relates_to_claims").and_then(|v| {
+        // Can be a JSON array (from experiment_to_json) or a plain string
+        if v.is_array() {
+            Some(v.to_string())
+        } else {
+            v.as_str().map(|s| s.to_string())
+        }
+    });
+    let relates_to_claims = relates_to_claims.as_deref();
     let hypothesis = json.get("hypothesis").and_then(|v| v.as_str());
     let _alternatives_considered = json.get("alternatives_considered").and_then(|v| v.as_str());
     let lesson = json.get("lesson").and_then(|v| v.as_str());
@@ -470,7 +478,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -528,7 +538,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -554,7 +566,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -581,7 +595,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -666,7 +682,9 @@ mod tests {
             None,
             None,
             None,
-            None, None, None,
+            None,
+            None,
+            None,
         )
         .unwrap();
 

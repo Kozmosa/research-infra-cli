@@ -74,7 +74,9 @@ pub fn new(
         Ok(git_repo) => {
             let mut diff_opts = git2::DiffOptions::new();
             diff_opts.include_untracked(true);
-            let diff = git_repo.diff_index_to_workdir(None, Some(&mut diff_opts)).ok();
+            let diff = git_repo
+                .diff_index_to_workdir(None, Some(&mut diff_opts))
+                .ok();
 
             let mut diff_text = String::new();
             if let Some(d) = diff {
@@ -86,7 +88,8 @@ pub fn new(
                         }
                     }
                     true
-                }).ok();
+                })
+                .ok();
             }
 
             if diff_text.trim().is_empty() {
@@ -1070,7 +1073,9 @@ pub fn import(
         None,
         Some(&format!("Imported from {}", source_path.display())),
         None,
-        None, None, None,
+        None,
+        None,
+        None,
     )?;
 
     Ok(exp_id)
@@ -1079,14 +1084,24 @@ pub fn import(
 pub fn set_hypothesis(repo: &Repository, exp_id: &str, hypothesis: &str) -> Result<()> {
     let db = Database::open(&repo.db_path())?;
     db.set_hypothesis(exp_id, hypothesis)?;
-    update_json_field(repo, exp_id, "hypothesis", serde_json::Value::String(hypothesis.to_string()))?;
+    update_json_field(
+        repo,
+        exp_id,
+        "hypothesis",
+        serde_json::Value::String(hypothesis.to_string()),
+    )?;
     Ok(())
 }
 
 pub fn set_lesson(repo: &Repository, exp_id: &str, lesson: &str) -> Result<()> {
     let db = Database::open(&repo.db_path())?;
     db.set_lesson(exp_id, lesson)?;
-    update_json_field(repo, exp_id, "lesson", serde_json::Value::String(lesson.to_string()))?;
+    update_json_field(
+        repo,
+        exp_id,
+        "lesson",
+        serde_json::Value::String(lesson.to_string()),
+    )?;
     Ok(())
 }
 
@@ -1112,7 +1127,12 @@ pub fn remove_claim(repo: &Repository, exp_id: &str, claim_id: &str) -> Result<(
     Ok(())
 }
 
-fn update_json_field(repo: &Repository, exp_id: &str, key: &str, value: serde_json::Value) -> Result<()> {
+fn update_json_field(
+    repo: &Repository,
+    exp_id: &str,
+    key: &str,
+    value: serde_json::Value,
+) -> Result<()> {
     let json_path = repo.exp_json_path(exp_id);
     if json_path.exists() {
         let content = fs::read_to_string(&json_path)?;
@@ -1230,7 +1250,8 @@ mod tests {
             None,
             None,
             None,
-            None, None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1299,7 +1320,8 @@ mod tests {
             None,
             None,
             None,
-            None, None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1313,7 +1335,9 @@ mod tests {
     fn test_new_requires_data_and_cmd() {
         let (repo, _dir) = create_test_repo();
 
-        let result = new(&repo, None, None, false, None, None, None, None, None, None, None);
+        let result = new(
+            &repo, None, None, false, None, None, None, None, None, None, None,
+        );
         assert!(matches!(result, Err(ArcliError::MissingRequiredArg(_))));
     }
 
@@ -1341,7 +1365,10 @@ mod tests {
     fn test_new_manual_mode_bypasses_data_requirement() {
         let (repo, _dir) = create_test_repo();
 
-        let (exp_id, _) = new(&repo, None, None, true, None, None, None, None, None, None, None).unwrap();
+        let (exp_id, _) = new(
+            &repo, None, None, true, None, None, None, None, None, None, None,
+        )
+        .unwrap();
 
         let db = Database::open(&repo.db_path()).unwrap();
         let exp = db.get_experiment(&exp_id).unwrap().unwrap();
@@ -1386,7 +1413,8 @@ mod tests {
             None,
             None,
             None,
-            None, None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1415,7 +1443,8 @@ mod tests {
             None,
             None,
             None,
-            None, None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1811,7 +1840,8 @@ mod tests {
             None,
             None,
             None,
-            None, None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -1861,7 +1891,15 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         fs::write(source.join("experiment.json"), "{}").unwrap();
 
-        let result = import(&repo, source.to_str().unwrap(), "existing", "cmd", None, false, true);
+        let result = import(
+            &repo,
+            source.to_str().unwrap(),
+            "existing",
+            "cmd",
+            None,
+            false,
+            true,
+        );
         assert!(matches!(result, Err(ArcliError::ImportPathInvalid(_))));
     }
 }

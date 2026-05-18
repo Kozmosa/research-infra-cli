@@ -169,12 +169,13 @@ pub fn verify(repo: &Repository, claim_id: &str, exp_id: &str) -> Result<()> {
         return Err(ArcliError::ClaimAlreadyVerified(id_upper));
     }
 
+    // Write DB first so experiment-side link is created before claims.yaml is updated
+    let db = Database::open(&repo.db_path())?;
+    db.add_claim_to_experiment(exp_id, &id_upper)?;
+
     claim.verified_by.push(exp_id.to_string());
     claim.updated_at = now();
     save_claims(&path, &cf)?;
-
-    let db = Database::open(&repo.db_path())?;
-    db.add_claim_to_experiment(exp_id, &id_upper)?;
 
     Ok(())
 }
@@ -192,16 +193,15 @@ pub fn unverify(repo: &Repository, claim_id: &str, exp_id: &str) -> Result<()> {
     let old_len = claim.verified_by.len();
     claim.verified_by.retain(|e| e != exp_id);
     if claim.verified_by.len() == old_len {
-        return Err(ArcliError::ClaimNotFound(format!(
-            "实验 {} 的绑定",
-            exp_id
-        )));
+        return Err(ArcliError::ClaimNotFound(format!("实验 {} 的绑定", exp_id)));
     }
     claim.updated_at = now();
-    save_claims(&path, &cf)?;
 
+    // Write DB first so experiment-side link is removed before claims.yaml
     let db = Database::open(&repo.db_path())?;
     db.remove_claim_from_experiment(exp_id, &id_upper)?;
+
+    save_claims(&path, &cf)?;
 
     Ok(())
 }
